@@ -83,9 +83,50 @@ The NodeJS-Mobile runtime is Node 12; the modern holepunch stack (udx-native) ne
 2. **`uv_timer_get_due_in`** (added in libuv 1.45, missing in Node 12's libuv 1.39) is provided by a shim in `android/app/src/main/cpp/native-lib.cpp`, exported from the JNI lib linked above.
 3. `sodium-native` is shipped as a native addon (android-arm64 prebuild, patched like udx-native) and loaded at runtime — it must **not** be aliased to `sodium-javascript` (that pure-JS fallback is missing `crypto_scalarmult_ed25519_noclamp`, which breaks the DHT noise handshake).
 
-## Sideload
+## Sideload (how people install it)
 
-Build the debug APK, enable **Install unknown apps** on the device, and install. The app runs a **ForegroundService** (with a persistent notification) so the P2P stack keeps running and UDP/DHT sockets stay alive.
+The APK is a self-signed **debug** build — Android treats it as an "unknown app", so people just need to allow that. No Play Store, no signing certificate needed.
+
+### 1. Get the APK
+
+Build it once (this repo), then share the file:
+
+```bash
+npm run build:apk
+# → android/app/build/outputs/apk/debug/app-debug.apk  (~30 MB)
+```
+
+Send it by USB, a cloud link (Drive/Dropbox), or a messenger app that allows files.
+
+### 2. Allow "install unknown apps"
+
+On their phone (varies by Android version):
+
+- **Android 8+:** open the app they'll install from (Files / browser / messenger) → **Settings → Install unknown apps** → allow it.
+- Or: **Settings → Apps → Special app access → Install unknown apps** → pick the source app → **Allow**.
+
+### 3. Tap the APK and install
+
+- Open the APK file → **Install**.
+- **Play Protect may warn** "app not recognized by Google / unknown developer." Tap **Install anyway** / **More details → Install anyway**. (Expected — it's a self-signed dev APK.)
+
+### 4. Requirements
+
+- **Android 5.1+** (minSdk 22) — the Note 10 and anything newer is fine.
+- **~100 MB free** on internal storage (app is 30 MB, but install + Hypercore log need room).
+- **Internet** (Wi-Fi or cellular) — the P2P DHT needs it to find contacts.
+
+### 5. Pair with someone
+
+- Both people run the app, copy their **public key** (tap it in the top-left panel).
+- Swap keys **out-of-band** (any trusted channel), then each taps **Add Contact** and pastes the other's key.
+- **Both must add each other.** Same Wi-Fi connects fast; over the internet allow 10–30 s for DHT discovery.
+
+### Notes for testers
+
+- A **persistent notification** ("Running P2P check-in service") keeps the P2P stack alive — don't swipe it away.
+- A **battery optimization** prompt appears on first launch — accept it so Doze doesn't freeze the P2P service.
+- First run asks for **location permission** — needed for GPS check-ins (or use **Settings → Manual location**).
 
 ## Verified: live E2E encrypted sync (phone <-> desktop)
 
