@@ -1,0 +1,29 @@
+{
+  "name": "ichnaea-android",
+  "version": "0.1.0",
+  "description": "Ichnaea Android port — P2P privacy-first location check-ins with E2E encryption",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "npx cap sync && npx cap open android",
+    "test": "brittle test/*.test.js",
+    "node:start": "node src/node/server.js"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/geolocation": "^6.0.0",
+    "b4a": "^1.8.1",
+    "compact-encoding": "^3.3.0",
+    "hypercore": "^10.38.2",
+    "hypercore-crypto": "^3.7.0",
+    "hyperswarm": "^4.17.0",
+    "random-access-memory": "^6.2.1",
+    "sodium-universal": "^5.0.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "brittle": "^3.0.0"
+  }
+}
