@@ -29,6 +29,17 @@ function keyId (publicKeyBuf) {
   return b4a.toString(publicKeyBuf, 'hex')
 }
 
+// The store is one JSON file; serialize all read-modify-write mutations so
+// concurrent updates (e.g. setContactCoreKey + setContactLogKey from the
+// handshake) can't lose each other's fields.
+let writeQueue = Promise.resolve()
+
+function serialized (fn) {
+  const run = writeQueue.then(fn, fn)
+  writeQueue = run.then(() => undefined, () => undefined)
+  return run
+}
+
 export async function addContact ({ nickname, publicKeyB64 }, { selfPublicKey } = {}) {
   const buf = pubFromB64(publicKeyB64) // throws on invalid
   const id = keyId(buf)
@@ -38,28 +49,32 @@ export async function addContact ({ nickname, publicKeyB64 }, { selfPublicKey } 
     if (b4a.equals(buf, selfBuf)) throw new Error('Cannot add yourself as a contact')
   }
 
-  const contacts = await load()
-  if (contacts[id]) throw new Error('Contact already exists')
+  return serialized(async () => {
+    const contacts = await load()
+    if (contacts[id]) throw new Error('Contact already exists')
 
-  const contact = {
-    id,
-    nickname: String(nickname || '').trim() || 'Unnamed',
-    publicKeyB64: pubToB64(buf), // normalized
-    intervalMs: null,
-    lastSeenTs: 0,
-    coreKeyHex: null,
-    created: Date.now()
-  }
-  contacts[id] = contact
-  await save(contacts)
-  return contact
+    const contact = {
+      id,
+      nickname: String(nickname || '').trim() || 'Unnamed',
+      publicKeyB64: pubToB64(buf), // normalized
+      intervalMs: null,
+      lastSeenTs: 0,
+      coreKeyHex: null,
+      created: Date.now()
+    }
+    contacts[id] = contact
+    await save(contacts)
+    return contact
+  })
 }
 
 export async function removeContact (id) {
-  const contacts = await load()
-  delete contacts[id]
-  await save(contacts)
-  return true
+  return serialized(async () => {
+    const contacts = await load()
+    delete contacts[id]
+    await save(contacts)
+    return true
+  })
 }
 
 export async function getContact (id) {
@@ -73,12 +88,14 @@ export async function listContacts () {
 }
 
 async function patch (id, fields) {
-  const contacts = await load()
-  const c = contacts[id]
-  if (!c) return null
-  Object.assign(c, fields)
-  await save(contacts)
-  return c
+  return serialized(async () => {
+    const contacts = await load()
+    const c = contacts[id]
+    if (!c) return null
+    Object.assign(c, fields)
+    await save(contacts)
+    return c
+  })
 }
 
 export async function setContactInterval (id, intervalMs) {

@@ -81,11 +81,21 @@ The NodeJS-Mobile runtime is Node 12; the modern holepunch stack (udx-native) ne
    patchelf --add-needed libichnaea-nodejs-mobile.so android/app/src/main/assets/nodejs-native-assets-arm64-v8a/udx-native/prebuilds/android-arm64/udx-native.node
    ```
 2. **`uv_timer_get_due_in`** (added in libuv 1.45, missing in Node 12's libuv 1.39) is provided by a shim in `android/app/src/main/cpp/native-lib.cpp`, exported from the JNI lib linked above.
-3. `sodium-native` is aliased to the pure-JS `sodium-javascript` at bundle time (`--alias:sodium-native=sodium-javascript` in `build:node`).
+3. `sodium-native` is shipped as a native addon (android-arm64 prebuild, patched like udx-native) and loaded at runtime — it must **not** be aliased to `sodium-javascript` (that pure-JS fallback is missing `crypto_scalarmult_ed25519_noclamp`, which breaks the DHT noise handshake).
 
 ## Sideload
 
 Build the debug APK, enable **Install unknown apps** on the device, and install. The app runs a **ForegroundService** (with a persistent notification) so the P2P stack keeps running and UDP/DHT sockets stay alive.
+
+## Verified: live E2E encrypted sync (phone <-> desktop)
+
+`test/live-sync.mjs` spawns a Linux peer running the same P2P stack, adds it as a contact on the phone (via `adb forward tcp:14771 tcp:14770`), and verifies both directions over the live Hyperswarm DHT:
+
+- Both peers connect (`peers 1` on each side).
+- The phone's encrypted check-in is received **and decrypted** by the Linux peer (`contact:update ... lat=37.77`).
+- The Linux peer's encrypted check-in is received **and decrypted** by the phone (`contact:update ... lat=48.85`; the phone's persisted `contacts.json` shows the peer's `coreKeyHex`, `logKeyHex`, and advancing `lastSeenTs`).
+
+This confirms the full path: pair-topic discovery over the DHT → protomux handshake → X25519 sealed-box log-key exchange → encrypted Hypercore replication → secretbox decryption.
 
 ## License
 
