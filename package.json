@@ -1,13 +1,16 @@
 {
   "name": "ichnaea-android",
   "version": "0.1.0",
-  "description": "Ichnaea Android port — P2P privacy-first location check-ins with E2E encryption",
+  "description": "Ichnaea Android port \u2014 P2P privacy-first location check-ins with E2E encryption",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "npx cap sync && npx cap open android",
     "test": "brittle test/*.test.js",
-    "node:start": "node src/node/server.js"
+    "node:start": "node src/node/server.js",
+    "build:node": "esbuild src/node/server.js --bundle --platform=node --target=node12 --format=cjs --alias:sodium-native=sodium-javascript --external:udx-native --external:bufferutil --external:utf-8-validate --outfile=android/app/src/main/assets/nodejs-project/bundle.cjs",
+    "build:apk": "npm run build:node && npm run build:renderer && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "build:renderer": "esbuild src/main.js --bundle --format=esm --target=es2019 --outfile=src/main.bundle.js"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
@@ -15,15 +18,19 @@
     "@capacitor/geolocation": "^6.0.0",
     "b4a": "^1.8.1",
     "compact-encoding": "^3.3.0",
+    "globe.gl": "^2.46.1",
     "hypercore": "^10.38.2",
     "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.0",
     "random-access-memory": "^6.2.1",
+    "sodium-javascript": "^0.8.0",
     "sodium-universal": "^5.0.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0",
-    "brittle": "^3.0.0"
+    "brittle": "^3.0.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2"
   }
 }

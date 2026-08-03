@@ -28,6 +28,11 @@ export async function resolveFs () {
 
 export async function dataDir () {
   const { path } = await resolveFs()
+  // On Android the JNI layer sets ICHNAEA_DATA_DIR to the app's writable files
+  // dir (process.cwd() is "/" and not writable there). On desktop it falls back
+  // to the project's ./data directory.
+  const mobileDir = typeof process !== 'undefined' ? process.env.ICHNAEA_DATA_DIR : null
+  if (mobileDir) return path.join(mobileDir, 'data')
   const cwd = typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.'
   return path.join(cwd, 'data')
 }

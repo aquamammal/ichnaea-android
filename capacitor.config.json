@@ -1,0 +1,8 @@
+{
+  "appId": "com.ichnaea.android",
+  "appName": "Ichnaea",
+  "webDir": "src",
+  "server": {
+    "androidScheme": "http"
+  }
+}
