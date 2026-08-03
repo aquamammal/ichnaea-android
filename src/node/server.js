@@ -1,10 +1,33 @@
 import { WebSocketServer } from 'ws'
+import { createInterface } from 'node:readline'
 import { createMainApp } from '../main/app.js'
 
 const PORT = 14770
 
 const wss = new WebSocketServer({ port: PORT })
 console.log(`[ichnaea] WebSocket bridge listening on localhost:${PORT}`)
+
+// Kotlin -> Node lifecycle channel. The Android NodeService writes JSON lines to
+// our stdin (a socketpair wired in the JNI bridge) on network changes, so we can
+// suspend/resume the Hyperswarm DHT instead of letting sockets silently rot.
+const rl = createInterface({ input: process.stdin })
+rl.on('line', (line) => {
+  let msg
+  try { msg = JSON.parse(line) } catch (_) { return }
+  if (msg.type !== 'network') return
+  getApp()
+    .then((app) => {
+      if (msg.action === 'suspend') {
+        console.log('[ichnaea] lifecycle: suspending swarm')
+        return app.suspend()
+      }
+      if (msg.action === 'resume') {
+        console.log('[ichnaea] lifecycle: resuming swarm')
+        return app.resume()
+      }
+    })
+    .catch((err) => console.error('[ichnaea] lifecycle error:', err))
+})
 
 // One P2P app instance for the process lifetime. The WebView may reconnect
 // (suspend/resume, app restart) — each connection re-targets the same pipe so

@@ -304,5 +304,22 @@ export async function createMainApp ({ pipe }) {
 
   await boot()
 
-  return { handleMessage, state }
+  // Mobile lifecycle hooks: called from the native layer (via the Node stdin
+  // control channel) when the device's network changes, so Hyperswarm re-binds
+  // its UDP sockets and re-announces topics instead of silently dropping off.
+  async function suspend () {
+    const s = state.swarm && state.swarm.swarm
+    if (s && typeof s.suspend === 'function') {
+      try { await s.suspend() } catch { /* non-fatal */ }
+    }
+  }
+
+  async function resume () {
+    const s = state.swarm && state.swarm.swarm
+    if (s && typeof s.resume === 'function') {
+      try { await s.resume() } catch { /* non-fatal */ }
+    }
+  }
+
+  return { handleMessage, state, suspend, resume }
 }
