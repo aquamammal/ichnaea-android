@@ -46,6 +46,8 @@ function wants3D () {
     if (stored === '3d') return true
     if (stored === '2d') return false
   } catch { /* ignore */ }
+  // Default to the 3D globe on Android; desktop keeps the lightweight 2D map.
+  try { if (/Android/i.test(navigator.userAgent)) return true } catch { /* ignore */ }
   return false // default: 2D
 }
 
@@ -59,7 +61,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
       .backgroundColor('rgba(0,0,0,0)')
       .showAtmosphere(true)
       .atmosphereColor('#4a90d9')
-      .atmosphereDaylightAlpha(0.25)
+      .atmosphereAltitude(0.25)
       .pointAltitude('alt')
       .pointColor('color')
       .pointRadius('size')
@@ -75,6 +77,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   } catch (err) {
     // THREE.WebGLRenderer throws when the WebGL context can't be created even
     // though the pre-check passed — fall back to the 2D canvas map.
+    console.error('[globe] 3D init failed:', err && err.message)
     return create2DRenderer(container, { onPinClick })
   }
 
