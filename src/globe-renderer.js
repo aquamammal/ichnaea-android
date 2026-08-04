@@ -120,15 +120,12 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
       if (typeof globe.globe === 'function' && globe.globe()) roots.push(globe.globe())
       for (const root of roots) {
         root.traverse((obj) => {
-          if (obj.__globeObjType === 'point') {
-            found++
-            if (obj.geometry && obj.geometry !== teardropGeo) {
-              obj.geometry = teardropGeometry()
-            }
+          if (obj.__globeObjType === 'point' && obj.geometry && obj.geometry !== teardropGeo) {
+            obj.geometry = teardropGeometry()
           }
         })
       }
-    } catch { /* non-fatal */ }
+    } catch (e) { console.log('[globe] applyPointShapes error:', e.message) }
   }
 
   // The points layer renders its meshes on the frame loop, so swap the geometry
