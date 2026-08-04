@@ -92,7 +92,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.1.0-debug.apk
-- SHA-256: `d6dc6a69365eb3ecb5dd3d03da81f714d311f5c6e6200bee8291c4724fecf67f`
+- SHA-256: `594973dd69524df6915407136c6b02b678e4fd794b5f89e230257187268c4b06`
 
 Or build it yourself from this repo:
 
