@@ -70,7 +70,7 @@ function teardropGeometry () {
       pts.push(new THREE.Vector2(Math.max(r, 0.002), y))
     }
     teardropGeo = new THREE.LatheGeometry(pts, 24)
-    teardropGeo.rotateX(Math.PI / 2) // height axis Y -> outward Z
+    teardropGeo.rotateX(-Math.PI / 2) // height axis Y -> -Z (outward from the globe surface)
   }
   return teardropGeo
 }
