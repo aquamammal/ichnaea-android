@@ -148,19 +148,87 @@ export function create2DRenderer (container, { onPinClick } = {}) {
     return best
   }
 
+  // --- interaction: click pins, drag-pan, pinch/wheel-zoom ---------------------
+  let drag = null // { x, y, ox, oy, moved }
+  let pinch = null // { dist, midX, midY, scale } — two-finger zoom
+
   function eventPos (e) {
     const r = canvas.getBoundingClientRect()
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
-  // --- interaction: click pins, drag-pan, wheel-zoom -----------------------------
-  let drag = null // { x, y, ox, oy, moved }
+  function touchPos (e) {
+    const r = canvas.getBoundingClientRect()
+    const t = e.touches ? e.touches[0] : e.changedTouches[0]
+    return t ? { x: t.clientX - r.left, y: t.clientY - r.top } : null
+  }
+
+  function pinchInfo (e) {
+    const r = canvas.getBoundingClientRect()
+    const a = e.touches[0]
+    const b = e.touches[1]
+    return {
+      dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+      midX: (a.clientX + b.clientX) / 2 - r.left,
+      midY: (a.clientY + b.clientY) / 2 - r.top
+    }
+  }
+
+  const minScale = () => (canvas.clientWidth || 1) / 360 * 0.5
+
+  function zoomAt (p, ns) {
+    // Keep the world point under p fixed while changing scale.
+    ox = p.x - (p.x - ox) * (ns / scale)
+    oy = p.y - (p.y - oy) * (ns / scale)
+    scale = ns
+    userZoomed = true
+    draw()
+  }
 
   canvas.addEventListener('mousedown', (e) => {
     const p = eventPos(e)
     drag = { x: p.x, y: p.y, ox, oy, moved: false }
     canvas.style.cursor = 'grabbing'
   })
+  // Touch: drag-pan with one finger, pinch-zoom with two.
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const p = pinchInfo(e)
+      pinch = { dist: p.dist, midX: p.midX, midY: p.midY, scale }
+      drag = null
+      return
+    }
+    if (e.touches.length !== 1) return
+    e.preventDefault()
+    const p = touchPos(e)
+    if (p) drag = { x: p.x, y: p.y, ox, oy, moved: false }
+  }, { passive: false })
+  canvas.addEventListener('touchmove', (e) => {
+    if (pinch && e.touches.length === 2) {
+      e.preventDefault()
+      const p = pinchInfo(e)
+      const factor = p.dist / pinch.dist
+      const ns = Math.min(Math.max(pinch.scale * factor, minScale()), pinch.scale * 20)
+      // Zoom around the midpoint where the pinch started.
+      ox = pinch.midX - (pinch.midX - ox) * (ns / scale)
+      oy = pinch.midY - (pinch.midY - oy) * (ns / scale)
+      scale = ns
+      userZoomed = true
+      draw()
+      return
+    }
+    if (!drag || e.touches.length !== 1) return
+    e.preventDefault()
+    const p = touchPos(e)
+    if (!p) return
+    const dx = p.x - drag.x
+    const dy = p.y - drag.y
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true
+    ox = drag.ox + dx
+    oy = drag.oy + dy
+    draw()
+  }, { passive: false })
   if (typeof window !== 'undefined') {
     window.addEventListener('mousemove', (e) => {
       if (!drag) return
@@ -183,19 +251,24 @@ export function create2DRenderer (container, { onPinClick } = {}) {
       if (pin && onPinClick) onPinClick(pin.data)
     })
   }
+  canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) pinch = null
+    if (!drag) return
+    const wasDrag = drag.moved
+    drag = null
+    if (wasDrag) return
+    const p = touchPos(e)
+    if (!p) return
+    const pin = pinAt(p.x, p.y)
+    if (pin && onPinClick) onPinClick(pin.data)
+  }, { passive: true })
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault()
-    userZoomed = true
     const p = eventPos(e)
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-    const ns = Math.min(Math.max(scale * factor, (canvas.clientWidth || 1) / 360 * 0.5), scale * 20)
-    // Zoom around the cursor: keep the world point under the cursor fixed.
-    ox = p.x - (p.x - ox) * (ns / scale)
-    oy = p.y - (p.y - oy) * (ns / scale)
-    scale = ns
-    draw()
+    const ns = Math.min(Math.max(scale * factor, minScale()), scale * 20)
+    zoomAt(p, ns)
   }, { passive: false })
-
   // --- public API (same shape as the 3D renderer) --------------------------------
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }

@@ -50,12 +50,23 @@ async function contacts (ws) {
 
 async function main () {
   const linux = spawn('node', ['src/node/server.js'], { cwd: PROJECT, stdio: ['ignore', 'pipe', 'pipe'] })
+  linuxProc = linux
   linux.stdout.on('data', (d) => process.stdout.write('[linux] ' + d.toString()))
   linux.stderr.on('data', (d) => process.stdout.write('[linux!] ' + d.toString()))
   await sleep(3500)
 
   const phone = await connect(PHONE_WS)
   const linuxWs = await connect(LINUX_WS)
+
+  // Clear stale contacts from earlier runs (contacts persist on disk).
+  const clear = async (ws) => {
+    const b = await req(ws, 'boot')
+    for (const c of (b.contacts || [])) {
+      try { await req(ws, 'contact:remove', { contactId: c.id }, 10000) } catch {}
+    }
+  }
+  await clear(phone)
+  await clear(linuxWs)
 
   const keyA = (await req(phone, 'boot')).publicKeyB64
   const keyB = (await req(linuxWs, 'boot')).publicKeyB64
@@ -87,8 +98,12 @@ async function main () {
   }
 
   console.log('RESULT:', phoneSeen && linuxSeen ? 'LIVE SYNC PASS (both directions)' : 'LIVE SYNC FAIL')
-  linux.kill('SIGTERM')
   process.exit(phoneSeen && linuxSeen ? 0 : 1)
 }
 
+// Always reap the spawned peer, even on early errors.
+let linuxProc = null
+
 main().catch((e) => { console.error('TEST ERROR:', e.message); process.exit(1) })
+
+process.on('exit', () => { if (linuxProc) { try { linuxProc.kill('SIGKILL') } catch {} } })

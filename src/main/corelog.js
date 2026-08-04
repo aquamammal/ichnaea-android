@@ -1,5 +1,4 @@
 import Hypercore from 'hypercore'
-import RAM from 'random-access-memory'
 import Protomux from 'protomux'
 import b4a from 'b4a'
 import { encrypt, decrypt } from '../crypto.js'
@@ -61,16 +60,22 @@ export async function readLatest (core, logKey) {
 
 // --- Contact core replication ------------------------------------------------
 
-// Open a RAM core for a contact's core key and replicate it over a live
-// Hyperswarm connection. The connection is a @hyperswarm/secret-stream with a
-// shared Protomux at `conn.userData` (created in src/swarm.js). We attach to
-// that same mux so replication multiplexes with the JSON handshake instead of
-// fighting it for the byte stream. Returns the core; the caller polls
-// core.length and readLatest(). RAM storage means contact history is not cached
-// across restarts.
+// Storage directory for a contact's replicated core, keyed by their core key
+// so it reopens across restarts and the last pin stays visible offline.
+async function contactCoreDir (coreKeyHex) {
+  const { path } = await resolveFs()
+  return path.join(await dataDir(), 'cores', 'contact-' + coreKeyHex.slice(0, 16))
+}
+
+// Open a contact's core for replication over a live Hyperswarm connection. The
+// connection is a @hyperswarm/secret-stream with a shared Protomux at
+// `conn.userData` (created in src/swarm.js); we attach to that same mux so
+// replication multiplexes with the JSON handshake. Storage is on disk (not RAM)
+// so the contact's history survives restarts. Pass no `conn` to just open the
+// persisted core (used on boot to show cached pins).
 export async function replicateContactCore (coreKeyHex, conn) {
   const key = b4a.from(coreKeyHex, 'hex')
-  const core = new Hypercore(RAM, key)
+  const core = new Hypercore(await contactCoreDir(coreKeyHex), key, { createIfMissing: true })
   await core.ready()
   const mux = conn && conn.userData && Protomux.isProtomux(conn.userData)
     ? conn.userData

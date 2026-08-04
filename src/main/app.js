@@ -25,6 +25,30 @@ export async function createMainApp ({ pipe }) {
     return rest
   }
 
+  // Re-open each contact's persisted core (if any) so their last pin shows in
+  // the boot response even before the peer reconnects. Requires the peer's log
+  // key to decrypt — otherwise the block can't be read and the pin is omitted.
+  async function attachCachedPins (contacts) {
+    const out = []
+    for (const c of contacts) {
+      if (!c.coreKeyHex || !c.logKeyHex) { out.push(c); continue }
+      try {
+        const core = await replicateContactCore(c.coreKeyHex)
+        if (core.length > 0) {
+          const latest = await readLatest(core, b4a.from(c.logKeyHex, 'hex'))
+          if (latest) out.push({ ...c, lat: latest.lat, lng: latest.lng })
+          else out.push(c)
+        } else {
+          out.push(c)
+        }
+        await core.close()
+      } catch {
+        out.push(c)
+      }
+    }
+    return out
+  }
+
   // --- state -----------------------------------------------------------------
   const state = {
     identity: null,
@@ -217,14 +241,15 @@ export async function createMainApp ({ pipe }) {
 
     try {
       if (msg.type === 'boot') {
-        const list = (await contacts.listContacts()).map(toRendererContact)
+        const raw = await contacts.listContacts()
+        const list = await attachCachedPins(raw)
         const latest = await readLatest(state.localCore, state.identity.logKey)
         send({
           type: 'boot',
           id: msg.id,
           publicKeyB64: pubToB64(state.identity.publicKey),
           intervalMs: state.settings.intervalMs,
-          contacts: list,
+          contacts: list.map(toRendererContact),
           selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null,
           manual: getManual()
         })

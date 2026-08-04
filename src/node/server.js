@@ -31,11 +31,13 @@ rl.on('line', (line) => {
     .catch((err) => console.error('[ichnaea] lifecycle error:', err))
 })
 
-// One P2P app instance for the process lifetime. The WebView may reconnect
-// (suspend/resume, app restart) — each connection re-targets the same pipe so
-// state (identity, contacts, swarm, Hypercore lock) is preserved.
+// One P2P app instance for the process lifetime. Multiple renderer connections
+// (the WebView + diagnostics) share it: app -> renderer messages are broadcast
+// to every connection, and each client matches replies by request id. State
+// (identity, contacts, swarm, Hypercore lock) is preserved across reconnects.
+const connections = new Set()
 let appPromise = null
-let currentPipe = { write () {} } // mutated to the active ws
+let currentPipe = { write () {} } // broadcasts to all connected renderers
 
 function getApp () {
   if (!appPromise) {
@@ -48,11 +50,14 @@ function getApp () {
   return appPromise
 }
 
-wss.on('connection', async (ws) => {
-  // Route app -> renderer pushes to this connection.
-  currentPipe.write = (data) => {
+currentPipe.write = (data) => {
+  for (const ws of connections) {
     try { ws.send(data) } catch (_) { /* ws closed */ }
   }
+}
+
+wss.on('connection', async (ws) => {
+  connections.add(ws)
 
   // Route renderer -> app requests.
   ws.on('message', (raw) => {
@@ -70,6 +75,7 @@ wss.on('connection', async (ws) => {
   })
 
   ws.on('close', () => {
+    connections.delete(ws)
     console.log('[ichnaea] renderer pipe closed')
   })
 
