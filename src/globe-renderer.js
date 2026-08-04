@@ -66,7 +66,7 @@ function teardropGeometry () {
       let r
       if (y < 0.4) r = Math.sin((y / 0.4) * (Math.PI / 2)) // point -> widest
       else r = 1 - ((y - 0.4) / 0.6) * 0.3 // slight taper toward the top
-      pts.push([Math.max(r, 0.002), y])
+      pts.push(new THREE.Vector2(Math.max(r, 0.002), y))
     }
     teardropGeo = new THREE.LatheGeometry(pts, 24)
     teardropGeo.rotateX(Math.PI / 2) // height axis Y -> outward Z
@@ -157,6 +157,15 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
     globe.arcsData(arcs)
   }
 
+  // Bring the globe's camera around to the self pin so it's actually visible
+  // (the default view faces the Atlantic). Smooth transition so it doesn't jump.
+  function centerOnSelf (lat, lng) {
+    try {
+      const pov = globe.pointOfView()
+      globe.pointOfView({ lat, lng, altitude: (pov && pov.altitude) || 2.5 }, 1200)
+    } catch { /* non-fatal */ }
+  }
+
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }
     pins.set('self', {
@@ -164,6 +173,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
       data: { self: true, lat, lng }
     })
     sync()
+    centerOnSelf(lat, lng)
   }
 
   // contact: { id, nickname, lastSeenTs, intervalMs }
