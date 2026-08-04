@@ -1,4 +1,5 @@
 import Globe from 'globe.gl'
+import * as THREE from 'three'
 import { create2DRenderer } from './map2d.js'
 
 // Globe renderer factory. Picks the 3D WebGL globe when a WebGL context can be
@@ -51,6 +52,28 @@ function wants3D () {
   return false // default: 2D
 }
 
+// Inverted-teardrop (map-pin) point geometry. three-globe hardcodes its points
+// as cylinders with no geometry accessor, so we swap each point mesh's geometry
+// after every pointsData render. Local space: point at Z=0 (the surface),
+// bulb up to Z=1 (the outward axis three-globe scales by altitude).
+let teardropGeo = null
+function teardropGeometry () {
+  if (!teardropGeo) {
+    const pts = []
+    const N = 14
+    for (let i = 0; i <= N; i++) {
+      const y = i / N
+      let r
+      if (y < 0.4) r = Math.sin((y / 0.4) * (Math.PI / 2)) // point -> widest
+      else r = 1 - ((y - 0.4) / 0.6) * 0.3 // slight taper toward the top
+      pts.push([Math.max(r, 0.002), y])
+    }
+    teardropGeo = new THREE.LatheGeometry(pts, 24)
+    teardropGeo.rotateX(Math.PI / 2) // height axis Y -> outward Z
+  }
+  return teardropGeo
+}
+
 export function createGlobeRenderer (container, { onPinClick } = {}) {
   if (!wants3D()) return create2DRenderer(container, { onPinClick })
   if (!webglAvailable()) return create2DRenderer(container, { onPinClick })
@@ -91,8 +114,33 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   const pins = new Map() // id -> { id, lat, lng, alt, color, size, data }
   let selfLoc = null
 
+  function applyPointShapes () {
+    try {
+      const roots = [globe.scene()]
+      if (typeof globe.globe === 'function' && globe.globe()) roots.push(globe.globe())
+      for (const root of roots) {
+        root.traverse((obj) => {
+          if (obj.__globeObjType === 'point') {
+            found++
+            if (obj.geometry && obj.geometry !== teardropGeo) {
+              obj.geometry = teardropGeometry()
+            }
+          }
+        })
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  // The points layer renders its meshes on the frame loop, so swap the geometry
+  // after a few ticks (idempotent — only replaces meshes still using the
+  // default cylinder).
+  function scheduleShapeSwap () {
+    for (const ms of [0, 100, 300, 900, 2000]) setTimeout(applyPointShapes, ms)
+  }
+
   function sync () {
     globe.pointsData([...pins.values()])
+    scheduleShapeSwap()
     syncArcs()
   }
 
@@ -115,7 +163,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }
     pins.set('self', {
-      id: 'self', lat, lng, alt: 0.06, color: COLOR_SELF, size: 0.7,
+      id: 'self', lat, lng, alt: 0.03, color: COLOR_SELF, size: 0.35,
       data: { self: true, lat, lng }
     })
     sync()
@@ -126,7 +174,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function upsertContactPin (contact, loc, status) {
     const color = status === 'stale' ? COLOR_STALE : COLOR_ACTIVE
     pins.set(contact.id, {
-      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.05, color, size: 0.55,
+      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025, color, size: 0.3,
       data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
     })
     sync()
