@@ -333,7 +333,7 @@ function contactColor (id, dim) {
   }
 
   function setPinScale (scale) {
-    pinScale = Math.max(0.2, Math.min(3, Number(scale) || 1))
+    pinScale = Math.max(0.2, Math.min(20, Number(scale) || 1))
     draw()
   }
 

@@ -129,21 +129,46 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   const pins = new Map() // id -> { id, lat, lng, alt, color, size, data }
   let selfLoc = null
   let pinScale = 1
-  let originalMap = null
-  let grayMap = null
+  let refAlt = null // camera altitude at which pins have their base size
+  let lastAlt = null
+
+  // Camera counter-scale: as the globe zooms, keep pins a constant screen size.
+  function applyCounterScale (k) {
+    try {
+      globe.scene().traverse((obj) => {
+        if (obj.__globeObjType === 'point' && obj.userData.baseScale) {
+          obj.scale.copy(obj.userData.baseScale).multiplyScalar(k)
+        }
+      })
+    } catch { /* non-fatal */ }
+  }
+
+  function currentK () {
+    try {
+      const pov = globe.pointOfView()
+      const alt = pov && pov.altitude ? pov.altitude : 2.5
+      if (refAlt === null) { refAlt = alt; return 1 }
+      return alt / refAlt
+    } catch { return 1 }
+  }
 
   function applyPointShapes () {
     try {
+      const k = currentK()
       const roots = [globe.scene()]
       if (typeof globe.globe === 'function' && globe.globe()) roots.push(globe.globe())
       for (const root of roots) {
         root.traverse((obj) => {
-          if (obj.__globeObjType === 'point' && obj.geometry && obj.geometry !== teardropGeo) {
-            obj.geometry = teardropGeometry()
+          if (obj.__globeObjType === 'point') {
+            if (obj.geometry && obj.geometry !== teardropGeo) obj.geometry = teardropGeometry()
+            // Capture three-globe's base scale (set on pointsData), then apply the
+            // camera counter-scale so pins hold a constant screen size while zooming.
+            if (!obj.userData.baseScale) obj.userData.baseScale = obj.scale.clone()
+            obj.scale.copy(obj.userData.baseScale).multiplyScalar(k)
           }
         })
       }
-    } catch (e) { console.log('[globe] applyPointShapes error:', e.message) }
+    } catch { /* non-fatal */ }
   }
 
   // The points layer renders its meshes on the frame loop, so swap the geometry
@@ -207,8 +232,12 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
 
   // Rescale every pin (0.2x..3x) and re-render.
   function setPinScale (scale) {
-    pinScale = Math.max(0.2, Math.min(3, Number(scale) || 1))
+    pinScale = Math.max(0.2, Math.min(20, Number(scale) || 1))
     for (const p of pins.values()) p.size = (p.baseSize || 0.3) * pinScale
+    // Force re-capture of base scales so the new size applies.
+    try {
+      globe.scene().traverse((obj) => { if (obj.__globeObjType === 'point') delete obj.userData.baseScale })
+    } catch { /* non-fatal */ }
     sync()
   }
 
@@ -260,6 +289,21 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
 
   resize()
   if (typeof window !== 'undefined') window.addEventListener('resize', resize)
+
+  // Keep pins a constant on-screen size regardless of globe zoom.
+  const tick = () => {
+    try {
+      const pov = globe.pointOfView()
+      const alt = pov && pov.altitude ? pov.altitude : null
+      if (alt && alt !== lastAlt) {
+        lastAlt = alt
+        if (refAlt === null) refAlt = alt
+        else applyCounterScale(alt / refAlt)
+      }
+    } catch { /* non-fatal */ }
+    requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
 
   return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, resize, globe, webgl: true }
 }
