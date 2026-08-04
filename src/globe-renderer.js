@@ -61,13 +61,14 @@ let teardropGeo = null
 function teardropGeometry () {
   if (!teardropGeo) {
     const pts = []
-    const N = 14
+    const N = 28
     for (let i = 0; i <= N; i++) {
-      const y = i / N
+      const t = i / N
       let r
-      if (y < 0.4) r = Math.sin((y / 0.4) * (Math.PI / 2)) // point -> widest
-      else r = 1 - ((y - 0.4) / 0.6) * 0.3 // slight taper toward the top
-      pts.push(new THREE.Vector2(Math.max(r, 0.002), y))
+      if (t < 0.45) r = 0.28 * Math.pow(t / 0.45, 1.6) // long visible point
+      else if (t < 0.7) r = 0.28 + 0.34 * ((t - 0.45) / 0.25) // widen to bulb
+      else r = 0.62 * (1 - ((t - 0.7) / 0.3) * 0.25) // rounded top
+      pts.push(new THREE.Vector2(Math.max(r, 0.015), t))
     }
     teardropGeo = new THREE.LatheGeometry(pts, 24)
     teardropGeo.rotateX(-Math.PI / 2) // height axis Y -> -Z (outward from the globe surface)
@@ -212,7 +213,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }
     pins.set('self', {
-      id: 'self', lat, lng, alt: 0.03, color: COLOR_SELF, baseSize: 0.35,
+      id: 'self', lat, lng, alt: 0.03, color: COLOR_SELF, baseSize: 0.5,
       size: 0.35 * pinScale, data: { self: true, lat, lng }
     })
     sync()
@@ -224,7 +225,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function upsertContactPin (contact, loc, status) {
     const color = contactColor(contact.id, status === 'stale')
     pins.set(contact.id, {
-      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025, color, baseSize: 0.3,
+      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025, color, baseSize: 0.42,
       size: 0.3 * pinScale, data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
     })
     sync()
