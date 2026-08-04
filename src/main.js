@@ -14,7 +14,7 @@ const els = {
   modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'),
   modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
-  pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'), grayscale: $('set-grayscale'),
+  pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
   pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'),
   toast: $('toast'), devPanel: $('dev-panel'), devStatus: $('dev-status'), versionTag: $('version-tag')
 }
@@ -45,8 +45,7 @@ const state = {
   intervalMs: DEFAULT_INTERVAL_MS,
   contacts: [],
   manual: { enabled: false, lat: null, lng: null },
-  pinScale: 1,
-  grayscale: false
+  pinScale: 1
 }
 
 // --- globe -------------------------------------------------------------------
@@ -268,7 +267,6 @@ function initUI () {
     els.setInterval.value = String(state.intervalMs)
     els.pinScale.value = String(state.pinScale)
     els.pinsizeVal.textContent = state.pinScale.toFixed(1) + '×'
-    els.grayscale.checked = state.grayscale
     syncManualUI()
     openModal(els.modalSet)
   })
@@ -278,7 +276,7 @@ function initUI () {
   $('set-confirm').addEventListener('click', onSaveSettings)
   $('btn-checkin-now').addEventListener('click', onCheckinNow)
 
-  // Map prefs: pin size slider + grayscale toggle (persisted in localStorage).
+  // Pin size slider (persisted in localStorage).
   els.pinScale.addEventListener('input', () => {
     const v = parseFloat(els.pinScale.value)
     state.pinScale = v
@@ -286,20 +284,12 @@ function initUI () {
     try { window.localStorage.setItem('pinScale', String(v)) } catch { /* ignore */ }
     if (state.globe && typeof state.globe.setPinScale === 'function') state.globe.setPinScale(v)
   })
-  els.grayscale.addEventListener('change', () => {
-    state.grayscale = els.grayscale.checked
-    try { window.localStorage.setItem('grayscale', state.grayscale ? '1' : '0') } catch { /* ignore */ }
-    if (state.globe && typeof state.globe.setGrayscale === 'function') state.globe.setGrayscale(state.grayscale)
-  })
   // Load saved prefs into the controls and the current globe.
   try {
     const ps = parseFloat(window.localStorage.getItem('pinScale'))
     if (isFinite(ps) && ps > 0) { state.pinScale = ps; els.pinScale.value = String(ps); els.pinsizeVal.textContent = ps.toFixed(1) + '×' }
-    const gs = window.localStorage.getItem('grayscale')
-    if (gs === '1') { state.grayscale = true; els.grayscale.checked = true }
   } catch { /* ignore */ }
   if (state.globe && typeof state.globe.setPinScale === 'function') state.globe.setPinScale(state.pinScale)
-  if (state.globe && typeof state.globe.setGrayscale === 'function') state.globe.setGrayscale(state.grayscale)
 
   $('btn-manual-checkin').addEventListener('click', onManualCheckin)
   els.manualEnabled.addEventListener('change', onManualToggle)

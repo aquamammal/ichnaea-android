@@ -1,5 +1,6 @@
 import Globe from 'globe.gl'
 import * as THREE from 'three'
+import WORLD from './assets/world.js'
 import { create2DRenderer } from './map2d.js'
 
 // Globe renderer factory. Picks the 3D WebGL globe when a WebGL context can be
@@ -105,6 +106,11 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
       .arcDashAnimateTime(2000)
       .arcStroke(0.5)
       .arcAltitudeAutoScale(0.3)
+      .polygonsData(WORLD.features)
+      .polygonCapColor(() => 'rgba(0,0,0,0)')
+      .polygonSideColor(() => 'rgba(0,0,0,0)')
+      .polygonStrokeColor(() => 'rgba(148,163,184,0.5)')
+      .polygonAltitude(0.001)
       .onPointClick((pt) => { if (onPinClick && pt && pt.data) onPinClick(pt.data) })
   } catch (err) {
     // THREE.WebGLRenderer throws when the WebGL context can't be created even
@@ -113,12 +119,12 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
     return create2DRenderer(container, { onPinClick })
   }
 
-  // Earth surface texture, bundled locally (copied from three-globe's examples)
-  // so the 3D globe makes no third-party network call either. Falls back to a
-  // plain globe if the image can't load.
+  // Plain dark sphere + country borders drawn as lines (Natural Earth 110m,
+  // bundled locally — no network calls). Pins stay colored on top.
   try {
-    globe.globeImageUrl('./assets/earth-blue-marble.jpg')
-  } catch { /* texture optional */ }
+    const mat = globe.globeMaterial()
+    if (mat) mat.color = new THREE.Color('#0a1a2e')
+  } catch { /* non-fatal */ }
 
   const pins = new Map() // id -> { id, lat, lng, alt, color, size, data }
   let selfLoc = null
