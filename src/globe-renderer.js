@@ -74,6 +74,15 @@ function teardropGeometry () {
   return teardropGeo
 }
 
+// Stable per-contact color (hue hashed from the contact id) so each contact
+// keeps its own color across sessions. `dim` produces a faded variant for stale pins.
+function contactColor (id, dim) {
+  let h = 2165387
+  for (let i = 0; i < id.length; i++) h = ((h * 31) + id.charCodeAt(i)) >>> 0
+  const hue = h % 360
+  return dim ? `hsla(${hue}, 60%, 45%, 0.5)` : `hsl(${hue}, 75%, 62%)`
+}
+
 export function createGlobeRenderer (container, { onPinClick } = {}) {
   if (!wants3D()) return create2DRenderer(container, { onPinClick })
   if (!webglAvailable()) return create2DRenderer(container, { onPinClick })
@@ -113,6 +122,9 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
 
   const pins = new Map() // id -> { id, lat, lng, alt, color, size, data }
   let selfLoc = null
+  let pinScale = 1
+  let originalMap = null
+  let grayMap = null
 
   function applyPointShapes () {
     try {
@@ -169,8 +181,8 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }
     pins.set('self', {
-      id: 'self', lat, lng, alt: 0.03, color: COLOR_SELF, size: 0.35,
-      data: { self: true, lat, lng }
+      id: 'self', lat, lng, alt: 0.03, color: COLOR_SELF, baseSize: 0.35,
+      size: 0.35 * pinScale, data: { self: true, lat, lng }
     })
     sync()
     centerOnSelf(lat, lng)
@@ -179,12 +191,53 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   // contact: { id, nickname, lastSeenTs, intervalMs }
   // loc: { lat, lng }  status: 'active' | 'stale'
   function upsertContactPin (contact, loc, status) {
-    const color = status === 'stale' ? COLOR_STALE : COLOR_ACTIVE
+    const color = contactColor(contact.id, status === 'stale')
     pins.set(contact.id, {
-      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025, color, size: 0.3,
-      data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
+      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025, color, baseSize: 0.3,
+      size: 0.3 * pinScale, data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
     })
     sync()
+  }
+
+  // Rescale every pin (0.2x..3x) and re-render.
+  function setPinScale (scale) {
+    pinScale = Math.max(0.2, Math.min(3, Number(scale) || 1))
+    for (const p of pins.values()) p.size = (p.baseSize || 0.3) * pinScale
+    sync()
+  }
+
+  // Toggle the globe surface to grayscale. Pins keep their color (only the
+  // earth texture is desaturated) so per-contact colors stay meaningful.
+  function setGrayscale (on) {
+    try {
+      const mat = globe.globeMaterial()
+      if (!mat || !mat.map) return
+      if (on) {
+        if (!grayMap) {
+          const img = mat.map.image
+          if (!img) return
+          const canvas = document.createElement('canvas')
+          const c2 = canvas.getContext('2d')
+          canvas.width = img.width || 1024
+          canvas.height = img.height || 512
+          c2.drawImage(img, 0, 0, canvas.width, canvas.height)
+          const id = c2.getImageData(0, 0, canvas.width, canvas.height)
+          const d = id.data
+          for (let i = 0; i < d.length; i += 4) {
+            const g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0
+            d[i] = d[i + 1] = d[i + 2] = g
+          }
+          c2.putImageData(id, 0, 0)
+          grayMap = new THREE.CanvasTexture(canvas)
+          grayMap.colorSpace = mat.map.colorSpace || THREE.SRGBColorSpace
+        }
+        if (!originalMap) originalMap = mat.map
+        mat.map = grayMap
+      } else if (originalMap) {
+        mat.map = originalMap
+      }
+      mat.needsUpdate = true
+    } catch { /* non-fatal */ }
   }
 
   function removeContactPin (contactId) {
@@ -202,5 +255,5 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   resize()
   if (typeof window !== 'undefined') window.addEventListener('resize', resize)
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, resize, globe, webgl: true }
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, resize, globe, webgl: true }
 }

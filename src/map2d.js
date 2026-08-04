@@ -32,8 +32,16 @@ export function create2DRenderer (container, { onPinClick } = {}) {
   container.appendChild(canvas)
   const ctx = canvas.getContext('2d')
 
+function contactColor (id, dim) {
+  let h = 2165387
+  for (let i = 0; i < id.length; i++) h = ((h * 31) + id.charCodeAt(i)) >>> 0
+  const hue = h % 360
+  return dim ? `hsla(${hue}, 60%, 45%, 0.55)` : `hsl(${hue}, 75%, 58%)`
+}
+
   const pins = new Map() // id -> { id, lat, lng, color, data }
   let selfLoc = null
+  let pinScale = 1
   const world = WORLD // bundled Natural Earth FeatureCollection (no fetch needed)
 
   // View transform: the equirectangular world map is drawn into a rect of
@@ -114,7 +122,7 @@ export function create2DRenderer (container, { onPinClick } = {}) {
     const ordered = [...pins.values()].sort((a, b) => (a.id === 'self' ? 1 : 0) - (b.id === 'self' ? 1 : 0))
     for (const p of ordered) {
       const { x, y } = project(p.lat, p.lng)
-      const r = p.id === 'self' ? 6 : 5
+      const r = (p.id === 'self' ? 6 : 5) * pinScale
       ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, Math.PI * 2)
       ctx.fillStyle = p.color + '33'; ctx.fill() // soft halo
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2)
@@ -279,7 +287,7 @@ export function create2DRenderer (container, { onPinClick } = {}) {
   // contact: { id, nickname, lastSeenTs, intervalMs }
   // loc: { lat, lng }  status: 'active' | 'stale'
   function upsertContactPin (contact, loc, status) {
-    const color = status === 'stale' ? COLOR_STALE : COLOR_ACTIVE
+    const color = contactColor(contact.id, status === 'stale')
     pins.set(contact.id, {
       id: contact.id, lat: loc.lat, lng: loc.lng, color,
       data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
@@ -324,5 +332,14 @@ export function create2DRenderer (container, { onPinClick } = {}) {
     }
   }
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, resize, globe: null, webgl: false }
+  function setPinScale (scale) {
+    pinScale = Math.max(0.2, Math.min(3, Number(scale) || 1))
+    draw()
+  }
+
+  function setGrayscale (on) {
+    canvas.style.filter = on ? 'grayscale(1)' : ''
+  }
+
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, resize, globe: null, webgl: false }
 }
