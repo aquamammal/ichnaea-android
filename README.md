@@ -89,10 +89,13 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 - `src/globe-renderer.js` — the 3D globe, styled by id (wireframe / texture / colored countries).
 - `src/map2d.js` — the 2D canvas map, using `d3-geo` projections (`geoEquirectangular` for Map / Centered-on-Me, `geoAirocean` for Dymaxion) with pan, pinch/wheel zoom, and pin hit-testing via `projection.invert`. The Centered-on-Me style re-centers on the self pin whenever you check in.
 - `src/country-colors.js` — the shared per-country color palette used by both the 2D maps and the 3D globe, so a country looks the same in every projection.
+- `src/scanner.js` — the camera QR scanner (`getUserMedia` + `jsqr`, fully on-device) that powers Add Contact's **Scan QR code** button.
 
 **Colored countries toggle** — a live button on the Check-In Beacon tile (`Colored countries` On/Off) fills each country with its own hue. It applies to **every** view: all three 2D maps and all three 3D globe styles (including the wireframe globe). The toggle is persisted (`coloredCountries`), applied at boot via `createRenderer({ colored })`, and toggles in place via the renderer's `setColored()` — no reload needed.
 
-**QR code sharing** — the `QR` button next to your public key renders it as a scannable QR code (locally via the bundled `qrcode` lib — no network), with the key text underneath for manual copy. A friend scans it with their camera (or any QR reader) to get your Base64 public key for "Add Contact" — or just taps the key text to copy it.
+**QR code sharing** — the `QR` button next to your public key renders it as a scannable QR code (locally via the bundled `qrcode` lib — no network), with the key text underneath for manual copy. A friend scans it with their camera (or any QR reader) to get your Base64 public key — or just taps the key text to copy it.
+
+**QR code scanning** — **Add Contact** has a **Scan QR code** button that opens the camera (back-facing), decodes the friend's QR on-device with the bundled `jsqr` lib (zero telemetry), and fills the public-key field automatically. Requires the **Camera** permission (declared in the manifest; Android prompts on first use).
 
 All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 
@@ -117,7 +120,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.0-debug.apk
-- SHA-256: `19549c2a2b028ddb90d48bdd7dfdf89329571d2f2737abbe2389ee98f7a97d71`
+- SHA-256: `d8b1090a1d21b4af5cbf6bdcae1a373a3bee16ef50a08dd3d2cbd49012a4081b`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -173,7 +176,7 @@ On their phone (varies by Android version):
 
 Two ways to exchange public keys:
 
-- **QR (phone-to-phone):** one person taps **QR** next to their public key (top-left panel) to show it as a scannable code. The other person scans it with their phone camera or any QR reader, gets the Base64 key text, then taps **Add Contact** and pastes it.
+- **QR scan (phone-to-phone):** one person taps **QR** next to their public key (top-left panel) to show it as a scannable code. The other person taps **Add Contact → Scan QR code**, points the camera at it, and the key fills in automatically.
 - **Copy / paste (phone-to-phone or phone-to-desktop):** each person copies their **public key** (tap it in the top-left panel), swaps keys **out-of-band** (any trusted channel — messaging app, in person, etc.), then taps **Add Contact** and pastes the other's key.
 
 **Both must add each other.** Same Wi-Fi connects fast; over the internet allow 10–30 s for DHT discovery.
@@ -183,6 +186,7 @@ Two ways to exchange public keys:
 - A **persistent notification** ("Running P2P check-in service") keeps the P2P stack alive — don't swipe it away.
 - A **battery optimization** prompt appears on first launch — accept it so Doze doesn't freeze the P2P service.
 - First run asks for **location permission** — needed for GPS check-ins (or use **Settings → Manual location**).
+- **Camera permission** is asked the first time you use **Add Contact → Scan QR code** — only used for scanning a friend's QR on-device; the stream never leaves the phone.
 
 ## Verified: live E2E encrypted sync (phone <-> desktop)
 

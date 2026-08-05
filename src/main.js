@@ -2,6 +2,7 @@ import { classify, humanize, formatLocal, STATUS } from './staleness.js'
 import { createRenderer } from './renderer.js'
 import { MAP_STYLES, getMapStyleId, setMapStyleId, getColored, setColored } from './map-styles.js'
 import QRCode from 'qrcode/lib/browser.js'
+import { openScanner } from './scanner.js'
 
 // Renderer for Ichnaea Android. This is a THIN PIPE CLIENT: it owns only the
 // globe, the UI, and geolocation. ALL P2P state (identity, contacts, the local
@@ -16,7 +17,7 @@ const els = {
   btnQr: $('btn-qr'), modalQr: $('modal-qr'), qrCanvas: $('qr-canvas'), qrKey: $('qr-key'), qrClose: $('qr-close'),
   colorToggle: $('btn-color-countries'), colorVal: $('color-countries-val'),
   panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
-  modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'),
+  modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'), btnScanQr: $('btn-scan-qr'),
   modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
@@ -303,6 +304,9 @@ function initUI () {
   $('add-confirm').addEventListener('click', onAddContact)
   $('set-confirm').addEventListener('click', onSaveSettings)
   $('btn-checkin-now').addEventListener('click', onCheckinNow)
+  if (els.btnScanQr) {
+    els.btnScanQr.addEventListener('click', onScanQr)
+  }
 
   // Minimize/expand the panels.
   const toggleMin = (panel, btn) => {
@@ -428,6 +432,29 @@ async function onAddContact () {
     toast(`Added ${res.contact.nickname}`)
   } catch (err) {
     els.addErr.textContent = String(err.message || err)
+  }
+}
+
+// Scan a friend's QR code with the camera and fill the public-key field.
+async function onScanQr () {
+  els.addErr.textContent = ''
+  closeModal(els.modalAdd)
+  try {
+    const text = await openScanner()
+    if (text) {
+      // Normalize: our keys are raw base64 (no scheme prefix); strip any
+      // "ichnaea:" / "beacon:" prefix a future QR variant might carry.
+      els.addPub.value = text.replace(/^(ichnaea|beacon|iot):/i, '').trim()
+      openModal(els.modalAdd)
+      if (!els.addPub.value) {
+        els.addErr.textContent = 'That QR didn\u2019t contain a public key'
+      }
+    } else {
+      openModal(els.modalAdd) // cancelled
+    }
+  } catch (err) {
+    openModal(els.modalAdd)
+    els.addErr.textContent = 'Camera unavailable: ' + String(err && err.message || err)
   }
 }
 

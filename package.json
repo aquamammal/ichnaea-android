@@ -24,6 +24,7 @@
     "hypercore": "^10.38.2",
     "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.0",
+    "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "random-access-memory": "^6.2.1",
     "sodium-javascript": "^0.8.0",
