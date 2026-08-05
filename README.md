@@ -137,6 +137,12 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > committed before the artifact was refreshed, so the GitHub link served a build
 > without it. Commit the refreshed APK + new SHA with the feature change, then
 > push. Do not land a feature without its updated artifact.
+>
+> **Note:** the `android/` platform directory is gitignored (it's regenerated
+> locally by Capacitor); the committed artifact is the `dist/` APK. The native
+> manifest (`android/app/src/main/AndroidManifest.xml`) carries the `CAMERA`
+> permission used for QR scanning — if you ever regenerate the platform
+> (`npx cap add android`), re-add `<uses-permission android:name="android.permission.CAMERA" />`.
 
 Or build it yourself from this repo:
 
