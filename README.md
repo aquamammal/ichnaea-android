@@ -106,7 +106,7 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
 
-**Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists (with a tap-to-download link). It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry).
+**Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists. When one is available it shows an **Update now** button that downloads the new APK **in the app** and hands it to the Android package installer (via the native `IchnaeaUpdater` plugin), so you can update without leaving Ichnaea. It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry). On the first in-app update Android 8+ will ask you to allow Ichnaea to "Install unknown apps" — enable it, then tap Update again.
 
 **Connecting-lines toggle** — a "Connecting lines" On/Off button on the beacon tile shows/hides the dotted arcs from your pin to each contact. Works on every map style and the 3D globe; persisted.
 
@@ -135,7 +135,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.2-debug.apk
-- SHA-256: `0583a28bef8701763428901542c4d5cd0c7020ea3fbb18b00452dc11dc24eee3`
+- SHA-256: `81a36f9124d5bd8a42a3900292eef413f8156912ce769f386be22ca49a0559ff`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.

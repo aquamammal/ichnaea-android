@@ -25,7 +25,7 @@ const els = {
   setFreqMin: $('set-freq-min'), setFreqUnit: $('set-freq-unit'), freqDisplay: $('freq-display'),
   setPrecision: $('set-precision'),
   setSelfName: $('set-selfname'),
-  btnCheckUpdates: $('btn-check-updates'), updatesStatus: $('updates-status'), updatesDetail: $('updates-detail'),
+  btnCheckUpdates: $('btn-check-updates'), btnUpdateNow: $('btn-update-now'), updatesStatus: $('updates-status'), updatesDetail: $('updates-detail'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
   pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'), pinFingerprint: $('pin-fingerprint'),
@@ -85,6 +85,10 @@ const state = {
   selfName: '',
   precisionKm: 0
 }
+
+// Most recent update-check result, so the in-app "Update now" button knows the
+// APK URL to download.
+let lastUpdate = null
 
 // --- globe -------------------------------------------------------------------
 function initGlobe () {
@@ -432,6 +436,7 @@ function initUI () {
   $('btn-checkin-now').addEventListener('click', onCheckinNow)
   if (els.btnCheckUpdates) {
     els.btnCheckUpdates.addEventListener('click', onCheckUpdates)
+    if (els.btnUpdateNow) els.btnUpdateNow.addEventListener('click', onUpdateNow)
   }
   if (els.btnScanQr) {
     els.btnScanQr.addEventListener('click', onScanQr)
@@ -612,7 +617,8 @@ async function onScanQr () {
 }
 
 // Manual update check (Settings → Check for updates). Only makes a network
-// request when tapped — no traffic on boot or in the background.
+// request when tapped — no traffic on boot or in the background. When a newer
+// build exists, offer an in-app install (download + package installer).
 async function onCheckUpdates () {
   if (!els.btnCheckUpdates) return
   els.btnCheckUpdates.disabled = true
@@ -623,21 +629,52 @@ async function onCheckUpdates () {
   if (!res.ok) {
     els.updatesStatus.textContent = ''
     els.updatesDetail.textContent = 'Couldn\u2019t check: ' + (res.error || 'network error')
+    hideUpdateNow()
     return
   }
   if (res.updateAvailable) {
+    lastUpdate = res
     els.updatesStatus.textContent = '!'
-    els.updatesDetail.textContent = `v${res.current} \u2192 v${res.latest} available. ` +
-      `Tap to download: ${res.assetUrl || res.releaseUrl}`
-    // Make the detail a tap target for the release page / APK.
-    els.updatesDetail.title = res.assetUrl || res.releaseUrl
-    els.updatesDetail.style.cursor = 'pointer'
-    els.updatesDetail.onclick = () => { if (res.assetUrl) window.open(res.assetUrl, '_blank') }
+    els.updatesDetail.textContent = `v${res.current} \u2192 v${res.latest} available`
+    if (els.btnUpdateNow) {
+      els.btnUpdateNow.style.display = 'block'
+      els.btnUpdateNow.disabled = false
+    }
   } else {
+    lastUpdate = null
     els.updatesStatus.textContent = '\u2713'
     els.updatesDetail.textContent = `You\u2019re up to date (v${res.current}).`
-    els.updatesDetail.onclick = null
-    els.updatesDetail.style.cursor = 'default'
+    hideUpdateNow()
+  }
+}
+
+function hideUpdateNow () {
+  lastUpdate = null
+  if (els.btnUpdateNow) els.btnUpdateNow.style.display = 'none'
+}
+
+// Download the new APK in-app and hand it to the Android package installer via
+// the native IchnaeaUpdater plugin. Falls back to opening the URL in a browser
+// if the plugin is unavailable (e.g. on desktop).
+async function onUpdateNow () {
+  const res = lastUpdate
+  if (!res || !res.assetUrl) return
+  const cap = typeof window !== 'undefined' && window.Capacitor &&
+    window.Capacitor.Plugins && window.Capacitor.Plugins.IchnaeaUpdater
+  if (cap) {
+    els.updatesStatus.textContent = '\u2b07'
+    els.updatesDetail.textContent = 'Downloading update\u2026'
+    els.btnUpdateNow.disabled = true
+    try {
+      await cap.install({ url: res.assetUrl })
+      els.updatesDetail.textContent = 'Installer opened \u2014 confirm the update on the next screen.'
+    } catch (err) {
+      els.updatesDetail.textContent = 'Couldn\u2019t update: ' + String((err && err.message) || err)
+      els.btnUpdateNow.disabled = false
+    }
+  } else {
+    window.open(res.assetUrl, '_blank')
+    els.updatesDetail.textContent = 'Opening download\u2026'
   }
 }
 
