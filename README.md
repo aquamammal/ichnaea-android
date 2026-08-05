@@ -116,6 +116,8 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Offline check-in queue** — if a check-in fires while no contact is connected, a status line shows **"N check-ins queued (offline)"**; once a contact connects, the check-ins sync and it briefly shows **"Synced N offline check-ins"**.
 
+**Quiet-contact notifications** — when a contact goes stale/offline, a **local-only** notification says "X went quiet — last check-in …" (no coordinates, nothing sent). Toggle it in **Settings → Notify when a contact goes quiet** (default on).
+
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
 
 **Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists. When one is available it shows an **Update now** button that downloads the new APK **in the app** and hands it to the Android package installer (via the native `IchnaeaUpdater` plugin), so you can update without leaving Ichnaea. It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry). On the first in-app update Android 8+ will ask you to allow Ichnaea to "Install unknown apps" — enable it, then tap Update again.
@@ -146,8 +148,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.7-debug.apk
-- SHA-256: `f19c8b483ceb50513d1886546f6f6cd654d59dd44a71f36bdb1ee28fe57880e8`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.8-debug.apk
+- SHA-256: `0c4e3e7af3567145ce6a911863d0699756dad673eecedf39986abe7ca680a1ed`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -156,8 +158,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.7-debug.apk
-> sha256sum dist/ichnaea-android-v0.2.7-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.8-debug.apk
+> sha256sum dist/ichnaea-android-v0.2.8-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -170,7 +172,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.2.7 dist/ichnaea-android-v0.2.7-debug.apk --title "Ichnaea Android v0.2.7"
+> gh release create v0.2.8 dist/ichnaea-android-v0.2.8-debug.apk --title "Ichnaea Android v0.2.8"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the
@@ -185,6 +187,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > - Re-add `<uses-permission android:name="android.permission.CAMERA" />` (QR scanning).
 > - Re-add `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />` (in-app update install).
 > - Re-add the `IchnaeaUpdaterPlugin.java` class and register it in `MainActivity` (`registerPlugin(IchnaeaUpdaterPlugin.class)` in `onCreate`) — powers in-app APK download/install. It relies on the existing `FileProvider` (`${applicationId}.fileprovider`) + `res/xml/file_paths.xml` `cache-path`, which Capacitor's generated manifest already includes.
+> - Re-add the `IchnaeaNotifyPlugin.java` class and its `registerPlugin(IchnaeaNotifyPlugin.class)` line — posts local "went quiet" notifications. The `POST_NOTIFICATIONS` permission is already in the manifest.
 > - Re-apply any other `android/` customizations from `scripts/native-assets.mjs` notes (e.g. `NodeService.java`, the `CAMERA`/`POST_NOTIFICATIONS` permissions, the JNI bridge).
 
 Or build it yourself from this repo:

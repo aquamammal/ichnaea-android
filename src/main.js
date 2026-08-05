@@ -31,6 +31,7 @@ const els = {
   modalUnlock: $('modal-unlock'), unlockPass: $('unlock-passphrase'), unlockErr: $('unlock-error'), unlockConfirm: $('unlock-confirm'),
   modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
+  quietNotify: $('quiet-notify'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
   pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'), pinFingerprint: $('pin-fingerprint'),
@@ -295,6 +296,13 @@ function startStalenessSweep () {
   setInterval(() => {
     for (const c of state.contacts) {
       const status = classify(c.lastSeenTs, c.intervalMs)
+      const prev = quietNotified.get(c.id)
+      // Notify once per transition into stale/offline (never on first sight).
+      if ((status === STATUS.STALE || status === STATUS.OFFLINE) &&
+          prev && prev !== status && prev !== STATUS.NEVER && c.lastSeenTs) {
+        notifyQuiet(c)
+      }
+      quietNotified.set(c.id, status)
       if (status === STATUS.OFFLINE && state.globe.hasPin(c.id)) {
         state.globe.removeContactPin(c.id)
       } else if (status === STATUS.STALE && state.globe.hasPin(c.id) && typeof c.lat === 'number' && typeof c.lng === 'number') {
@@ -317,6 +325,7 @@ function pinCoords (contactId) {
 const UNREAD_KEY = 'ichnaea-seen'
 let bootTs = Date.now()
 let unreadIds = new Set()
+const quietNotified = new Map() // contactId -> last staleness status seen (#9)
 
 function loadUnread () {
   try {
@@ -346,6 +355,38 @@ function markUnread (id) {
 
 function markRead (id) {
   if (unreadIds.has(id)) { unreadIds.delete(id); saveUnread() }
+}
+
+// "Notify when a contact goes quiet" toggle (renderer-local preference). On.
+const QUIET_KEY = 'ichnaea-quiet-notify'
+function getQuietNotify () {
+  try { return localStorage.getItem(QUIET_KEY) !== '0' } catch { return true }
+}
+function setQuietNotify (v) {
+  try { localStorage.setItem(QUIET_KEY, v ? '1' : '0') } catch { /* ignore */ }
+}
+
+// Post a local "X went quiet" notification when a contact goes stale/offline.
+// Local-only, no coordinates. Android uses the IchnaeaNotify native plugin;
+// other environments use the Web Notification API if available.
+function notifyQuiet (c) {
+  if (!getQuietNotify()) return
+  const name = c.nickname || c.lastName || 'Contact'
+  const title = name + ' went quiet'
+  const body = 'Last check-in ' + humanize(c.lastSeenTs)
+  const cap = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.IchnaeaNotify
+  if (cap) {
+    cap.notify({ title, body }).catch(() => {})
+    return
+  }
+  if (typeof Notification !== 'undefined') {
+    try {
+      if (Notification.permission === 'granted') new Notification(title, { body })
+      else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((p) => { if (p === 'granted') new Notification(title, { body }) }).catch(() => {})
+      }
+    } catch { /* ignore */ }
+  }
 }
 
 // Open the check-in history timeline panel for a contact.
@@ -539,6 +580,7 @@ function initUI () {
     els.pinsizeVal.textContent = state.pinScale.toFixed(1) + '×'
     if (els.setSelfName) els.setSelfName.value = state.selfName
     if (els.setPrecision) els.setPrecision.value = String(state.precisionKm)
+    if (els.quietNotify) els.quietNotify.checked = getQuietNotify()
     syncEncryptUI()
     syncManualUI()
     openModal(els.modalSet)
@@ -557,6 +599,10 @@ function initUI () {
   }
   if (els.btnEncrypt) {
     els.btnEncrypt.addEventListener('click', onEncryptToggle)
+  }
+  if (els.quietNotify) {
+    els.quietNotify.checked = getQuietNotify()
+    els.quietNotify.addEventListener('change', () => setQuietNotify(els.quietNotify.checked))
   }
   if (els.historyClose) {
     els.historyClose.addEventListener('click', () => closeModal(els.modalHistory))
@@ -997,6 +1043,10 @@ function connect () {
   initGlobe()
   initUI()
   startStalenessSweep()
+
+  // Android: ask for notification permission once (quiet-contact alerts).
+  const cap = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.IchnaeaNotify
+  if (cap && typeof cap.requestPermissions === 'function') cap.requestPermissions().catch(() => {})
 
   ws = new WebSocket(WS_URL)
   ws.onopen = onOpen
