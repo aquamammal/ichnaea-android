@@ -8,6 +8,7 @@ import { loadSettings, saveSettings } from './settings.js'
 import { createMainScheduler } from './scheduler.js'
 import { snapCoords, PRECISION_KM_OPTIONS } from './precision.js'
 import { configureAtRest, readAtRestMarker, writeAtRestMarker } from './fsx.js'
+import * as pending from './pending.js'
 
 // Main-process P2P orchestrator. Owns the entire P2P stack (identity, local
 // Hypercore on the filesystem, Hyperswarm, contact-core replication, and the
@@ -158,6 +159,10 @@ export async function createMainApp ({ pipe }) {
         const contact = await contacts.getContact(contactId)
         if (contact) send({ type: 'contact:update', contact: toRendererContact(contact) })
         startContactReplication(contactId, meta.coreKey, conn)
+        // Now that a peer is connected, the local core (holding any offline
+        // check-ins) has replicated — clear the queue and tell the UI.
+        const n = await pending.clear()
+        if (n > 0) send({ type: 'pending', count: 0, synced: n })
       },
       onLogKey: async (contactId, logKey) => {
         await contacts.setContactLogKey(contactId, b4a.toString(logKey, 'hex'))
@@ -250,6 +255,14 @@ export async function createMainApp ({ pipe }) {
     const snapped = snapCoords(lat, lng, state.settings.precisionKm || 0)
     const res = await appendCheckin(state.localCore, { lat: snapped.lat, lng: snapped.lng, timestamp, name }, state.identity.logKey)
     send({ type: 'self', lat: snapped.lat, lng: snapped.lng, timestamp, name })
+    // Offline queue: if no contact is currently connected, record this check-in
+    // so the UI can show it queued; it's already in the local core, so it syncs
+    // via replication once a peer connects (flush happens in onPeerVerified).
+    const verified = state.swarm ? state.swarm.state().verified : 0
+    if (verified === 0) {
+      const added = await pending.enqueue({ lat: snapped.lat, lng: snapped.lng, timestamp, name })
+      if (added) send({ type: 'pending', count: await pending.count() })
+    }
     if (res.shouldRotate) await rotateCore(true) // rotate core AND log key (forward secrecy)
     return res
   }
@@ -319,6 +332,7 @@ export async function createMainApp ({ pipe }) {
           selfName: state.settings.selfName || '',
           precisionKm: state.settings.precisionKm || 0,
           atrest: state.atRest.enabled,
+          pendingCount: await pending.count(),
           contacts: list.map(toRendererContact),
           selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null,
           manual: getManual()

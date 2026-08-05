@@ -27,6 +27,7 @@ const els = {
   setPrecision: $('set-precision'),
   setSelfName: $('set-selfname'),
   btnCheckUpdates: $('btn-check-updates'), btnUpdateNow: $('btn-update-now'), updatesStatus: $('updates-status'), updatesDetail: $('updates-detail'),
+  queuedRow: $('queued-row'), queuedStatus: $('queued-status'),
   modalUnlock: $('modal-unlock'), unlockPass: $('unlock-passphrase'), unlockErr: $('unlock-error'), unlockConfirm: $('unlock-confirm'),
   modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
@@ -76,6 +77,25 @@ function toast (msg, ms = 2600) {
 }
 
 function setGpsStatus (msg) { els.gpsStatus.textContent = 'Location: ' + msg }
+
+// Show/hide the offline-queue status line ("N check-ins queued (offline)" or a
+// transient "N synced" notice after a peer connects).
+function setQueued (msg) {
+  if (!els.queuedRow) return
+  const count = Number(msg && msg.count) || 0
+  if (count > 0) {
+    els.queuedRow.style.display = 'flex'
+    els.queuedStatus.textContent = count + ' check-in' + (count === 1 ? '' : 's') + ' queued (offline)'
+    els.queuedStatus.style.color = 'var(--accent)'
+  } else if (msg && msg.synced) {
+    els.queuedRow.style.display = 'flex'
+    els.queuedStatus.textContent = 'Synced ' + msg.synced + ' offline check-in' + (msg.synced === 1 ? '' : 's')
+    els.queuedStatus.style.color = 'var(--green)'
+    setTimeout(() => { els.queuedRow.style.display = 'none' }, 4000)
+  } else {
+    els.queuedRow.style.display = 'none'
+  }
+}
 
 // --- state -------------------------------------------------------------------
 const state = {
@@ -228,6 +248,10 @@ function handlePush (msg) {
     case 'self': {
       state.globe.setSelf({ lat: msg.lat, lng: msg.lng })
       setGpsStatus(statusSuffix('checked in ' + humanize(msg.timestamp)))
+      break
+    }
+    case 'pending': {
+      setQueued(msg)
       break
     }
     case 'gps:request': {
@@ -1007,6 +1031,7 @@ async function loadState () {
   }
   state.atrest = Boolean(res.atrest)
   syncEncryptUI()
+  setQueued({ count: Number(res.pendingCount) || 0 })
   els.myPubkey.textContent = res.publicKeyB64
   state.intervalMs = res.intervalMs || DEFAULT_INTERVAL_MS
   const { value: fv, unitId: fu } = freqSplit(state.intervalMs)

@@ -167,12 +167,13 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2 id="beacon-title">Ichnaea Ver. 0.2.5</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.2.6</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
       <div class="row status-line"><span class="dot" id="peer-dot"></span><span id="peer-status">Connecting…</span></div>
       <div class="row status-line"><span id="gps-status">Location: idle</span></div>
+      <div class="row status-line" id="queued-row" style="display:none"><span id="queued-status" style="color:var(--accent)"></span></div>
       <div class="row status-line"><span id="freq-display" class="label" style="font-size:11px;color:var(--muted)">Broadcast: every 1 day</span></div>
       <div class="row">
         <button class="primary" id="btn-add-contact">Add Contact</button>
@@ -353,8 +354,8 @@
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.2.5</div>
+    <div id="version-tag">ichnaea-android v0.2.6</div>
 
-    <script type="module" src="./main.bundle.js?v=1785943504779"></script>
+    <script type="module" src="./main.bundle.js?v=1785946099915"></script>
   </body>
 </html>
