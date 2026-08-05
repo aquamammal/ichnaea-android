@@ -46,7 +46,8 @@ export function createSwarmManager ({
   onFirstConnection // optional timing hook: (msSinceBoot, contactId) => void
 }) {
   const swarm = new Hyperswarm(bootstrap && bootstrap.length ? { bootstrap } : undefined)
-  const discoveries = new Map() // contactId -> { discovery, topicHex, publicKeyB64 }  const byPubKey = new Map() // publicKeyB64 -> contactId
+  const discoveries = new Map() // contactId -> { discovery, topicHex, publicKeyB64 }
+  const byPubKey = new Map() // publicKeyB64 -> contactId
   const conns = new Map() // contactId -> verified conn
   const connToContact = new Map() // conn -> contactId (verified)
   const connToEncPub = new Map() // conn -> peer's X25519 enc public key (base64)

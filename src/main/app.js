@@ -138,7 +138,10 @@ export async function createMainApp ({ pipe }) {
 
   // --- swarm -----------------------------------------------------------------
   function initSwarm () {
-    const bootstrap = parseBootstrap(process.env.ICHNAEA_BOOTSTRAP)
+    // `process` is not injected in every Pear/Bare main-process runtime (fsx.js
+    // guards it for the same reason), so read env defensively.
+    const env = (typeof process !== 'undefined' && process.env) ? process.env : {}
+    const bootstrap = parseBootstrap(env.ICHNAEA_BOOTSTRAP)
     state.swarm = createSwarmManager({
       identity: state.identity,
       getIntervalMs: () => state.settings.intervalMs,
