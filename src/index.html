@@ -167,7 +167,7 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2 id="beacon-title">Ichnaea Ver. 0.2.10</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.2.11</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
@@ -334,6 +334,35 @@
       </div>
     </div>
 
+    <!-- Broadcast nudge (shown right after adding a contact) -->
+    <div class="modal-backdrop" id="modal-broadcast-nudge">
+      <div class="modal">
+        <h3>Contact added</h3>
+        <div class="label">Broadcast your coordinates now so they can see you?</div>
+        <div class="actions">
+          <button id="broadcast-nudge-later">Later</button>
+          <button class="primary" id="broadcast-nudge-now">Broadcast now</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual-coordinates prompt (no GPS fix) -->
+    <div class="modal-backdrop" id="modal-manual-checkin">
+      <div class="modal">
+        <h3>No GPS fix</h3>
+        <div class="label">Enter your coordinates to broadcast your location.</div>
+        <div class="row" style="gap:8px;margin-top:10px">
+          <input id="manual-checkin-lat" type="number" min="-90" max="90" step="any" placeholder="Lat (−90..90)" style="flex:1" />
+          <input id="manual-checkin-lng" type="number" min="-180" max="180" step="any" placeholder="Lng (−180..180)" style="flex:1" />
+        </div>
+        <div class="form-error" id="manual-checkin-error"></div>
+        <div class="actions">
+          <button id="manual-checkin-cancel">Cancel</button>
+          <button class="primary" id="manual-checkin-ok">Broadcast</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Unlock modal (shown when local data is passphrase-encrypted) -->
     <div class="modal-backdrop" id="modal-unlock">
       <div class="modal">
@@ -358,8 +387,8 @@
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.2.10</div>
+    <div id="version-tag">ichnaea-android v0.2.11</div>
 
-    <script type="module" src="./main.bundle.js?v=1785950723416"></script>
+    <script type="module" src="./main.bundle.js?v=1785951886009"></script>
   </body>
 </html>

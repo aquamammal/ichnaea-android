@@ -148,8 +148,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.10-debug.apk
-- SHA-256: `a4c8eed53c83259e196c1e96df71c51d530fd6956be5e57209590cf7807b4247`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.11-debug.apk
+- SHA-256: `d49e1f4afeab83850ad9ceecfaee911bdee69a089c7f23c1b5a71934cb593b76`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -158,8 +158,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.10-debug.apk
-> sha256sum dist/ichnaea-android-v0.2.10-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.11-debug.apk
+> sha256sum dist/ichnaea-android-v0.2.11-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -172,7 +172,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.2.10 dist/ichnaea-android-v0.2.10-debug.apk --title "Ichnaea Android v0.2.10"
+> gh release create v0.2.11 dist/ichnaea-android-v0.2.11-debug.apk --title "Ichnaea Android v0.2.11"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the

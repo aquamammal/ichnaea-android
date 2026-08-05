@@ -30,6 +30,8 @@ const els = {
   queuedRow: $('queued-row'), queuedStatus: $('queued-status'),
   modalUnlock: $('modal-unlock'), unlockPass: $('unlock-passphrase'), unlockErr: $('unlock-error'), unlockConfirm: $('unlock-confirm'),
   modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
+  modalBroadcastNudge: $('modal-broadcast-nudge'), broadcastNudgeNow: $('broadcast-nudge-now'), broadcastNudgeLater: $('broadcast-nudge-later'),
+  modalManualCheckin: $('modal-manual-checkin'), manualCheckinLat: $('manual-checkin-lat'), manualCheckinLng: $('manual-checkin-lng'), manualCheckinErr: $('manual-checkin-error'), manualCheckinOk: $('manual-checkin-ok'), manualCheckinCancel: $('manual-checkin-cancel'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
   quietNotify: $('quiet-notify'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
@@ -610,6 +612,14 @@ function initUI () {
   if (els.historyClose) {
     els.historyClose.addEventListener('click', () => closeModal(els.modalHistory))
   }
+  if (els.broadcastNudgeNow) {
+    els.broadcastNudgeNow.addEventListener('click', () => { closeModal(els.modalBroadcastNudge); onCheckinNow() })
+    els.broadcastNudgeLater.addEventListener('click', () => closeModal(els.modalBroadcastNudge))
+  }
+  if (els.manualCheckinOk) {
+    els.manualCheckinOk.addEventListener('click', onManualPromptCheckin)
+    els.manualCheckinCancel.addEventListener('click', () => closeModal(els.modalManualCheckin))
+  }
   if (els.btnScanQr) {
     els.btnScanQr.addEventListener('click', onScanQr)
   }
@@ -760,6 +770,11 @@ async function onAddContact () {
     els.addNick.value = ''; els.addPub.value = ''
     updateAddFingerprint()
     toast(`Added ${res.contact.nickname}`)
+    // Nudge: offer to broadcast right after adding a peer, so the first
+    // check-in isn't left to the (default 1-day) schedule.
+    if (els.modalBroadcastNudge) {
+      openModal(els.modalBroadcastNudge)
+    }
   } catch (err) {
     els.addErr.textContent = String(err.message || err)
   }
@@ -961,11 +976,46 @@ async function onSaveSettings () {
 
 async function onCheckinNow () {
   setGpsStatus(statusSuffix('requesting\u2026'))
+  // If a manual override is enabled, use the scheduler path (it uses the stored
+  // coords and never touches GPS).
+  if (state.manual && state.manual.enabled) {
+    try {
+      await request('checkin:now')
+      return
+    } catch (err) {
+      setGpsStatus(statusSuffix('unavailable'))
+      return
+    }
+  }
+  // Otherwise try GPS directly so that on failure we can prompt for manual
+  // coordinates instead of silently giving up.
   try {
-    await request('checkin:now')
+    const { lat, lng } = await getPositionOnce()
+    await request('checkin:manual', { lat, lng })
+    setGpsStatus(statusSuffix('checked in'))
   } catch (err) {
-    setGpsStatus(statusSuffix('unavailable'))
-    toast('Location unavailable \u2014 check permission')
+    setGpsStatus(statusSuffix('no GPS \u2014 enter coordinates'))
+    toast('No GPS fix \u2014 enter coordinates to broadcast')
+    openModal(els.modalManualCheckin)
+    els.manualCheckinErr.textContent = ''
+  }
+}
+
+// Submit manually-entered coordinates from the no-GPS prompt.
+async function onManualPromptCheckin () {
+  els.manualCheckinErr.textContent = ''
+  const lat = Number(els.manualCheckinLat.value)
+  const lng = Number(els.manualCheckinLng.value)
+  if (!isFinite(lat) || lat < -90 || lat > 90 || !isFinite(lng) || lng < -180 || lng > 180) {
+    els.manualCheckinErr.textContent = 'Enter valid latitude (\u221290..90) and longitude (\u2212180..180).'
+    return
+  }
+  try {
+    await request('checkin:manual', { lat, lng })
+    closeModal(els.modalManualCheckin)
+    toast(`Broadcast ${round(lat)},${round(lng)}`)
+  } catch (err) {
+    els.manualCheckinErr.textContent = String(err.message || err)
   }
 }
 
