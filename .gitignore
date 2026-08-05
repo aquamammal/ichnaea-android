@@ -4,3 +4,7 @@ android/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local AI handoff/context docs (not part of the repo)
+handoff.md
+context.md
