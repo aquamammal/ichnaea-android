@@ -374,7 +374,7 @@ function notifyQuiet (c) {
   const name = c.nickname || c.lastName || 'Contact'
   const title = name + ' went quiet'
   const body = 'Last check-in ' + humanize(c.lastSeenTs)
-  const cap = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.IchnaeaNotify
+  const cap = capPlugin('IchnaeaNotify')
   if (cap) {
     cap.notify({ title, body }).catch(() => {})
     return
@@ -592,6 +592,9 @@ function initUI () {
   $('btn-checkin-now').addEventListener('click', onCheckinNow)
   if (els.btnCheckUpdates) {
     els.btnCheckUpdates.addEventListener('click', onCheckUpdates)
+  }
+  if (els.btnUpdateNow) {
+    els.btnUpdateNow.addEventListener('click', onUpdateNow)
   }
   if (els.unlockConfirm) {
     els.unlockConfirm.addEventListener('click', onUnlock)
@@ -823,14 +826,24 @@ function hideUpdateNow () {
   if (els.btnUpdateNow) els.btnUpdateNow.style.display = 'none'
 }
 
+// Resolve a Capacitor plugin proxy, falling back to Capacitor.registerPlugin so
+// a native-only registered plugin is always reachable from the web layer.
+function capPlugin (name) {
+  if (typeof window === 'undefined' || !window.Capacitor) return null
+  if (window.Capacitor.Plugins && window.Capacitor.Plugins[name]) return window.Capacitor.Plugins[name]
+  if (typeof window.Capacitor.registerPlugin === 'function') {
+    try { return window.Capacitor.registerPlugin(name) } catch { return null }
+  }
+  return null
+}
+
 // Download the new APK in-app and hand it to the Android package installer via
 // the native IchnaeaUpdater plugin. Falls back to opening the URL in a browser
 // if the plugin is unavailable (e.g. on desktop).
 async function onUpdateNow () {
   const res = lastUpdate
   if (!res || !res.assetUrl) return
-  const cap = typeof window !== 'undefined' && window.Capacitor &&
-    window.Capacitor.Plugins && window.Capacitor.Plugins.IchnaeaUpdater
+  const cap = capPlugin('IchnaeaUpdater')
   if (cap) {
     els.updatesStatus.textContent = '\u2b07'
     els.updatesDetail.textContent = 'Downloading update\u2026'
@@ -1045,7 +1058,7 @@ function connect () {
   startStalenessSweep()
 
   // Android: ask for notification permission once (quiet-contact alerts).
-  const cap = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.IchnaeaNotify
+  const cap = capPlugin('IchnaeaNotify')
   if (cap && typeof cap.requestPermissions === 'function') cap.requestPermissions().catch(() => {})
 
   ws = new WebSocket(WS_URL)
