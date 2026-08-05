@@ -1,13 +1,15 @@
 import Globe from 'globe.gl'
 import * as THREE from 'three'
 import WORLD from './assets/world.js'
-import { create2DRenderer } from './map2d.js'
 
-// Globe renderer factory. Picks the 3D WebGL globe when a WebGL context can be
-// created, otherwise falls back to the 2D canvas map (src/map2d.js) — some
-// Linux GPU/driver combos block WebGL in the Pear/Electron window and Pear
-// gives app code no way to inject Chromium flags. Both renderers expose the
-// same interface, so src/main.js needs no changes:
+// 3D WebGL globe renderer. Callers (the dispatcher in src/renderer.js) choose
+// a map style first (src/map-styles.js) and pass a 3D style id here:
+//   - globe-wireframe   : plain dark sphere + country border lines
+//   - globe-texture     : full-color Blue Marble earth
+//   - globe-countries   : distinct country fills over blue water
+// It throws 'webgl-unavailable' when WebGL can't be created so the dispatcher
+// can fall back to the 2D map renderer (src/map2d.js). Both renderers expose
+// the same interface, so callers need no changes:
 //
 //   { setSelf, upsertContactPin, removeContactPin, hasPin, resize, globe, webgl }
 //
@@ -16,7 +18,7 @@ import { create2DRenderer } from './map2d.js'
 //   stale        -> gray
 //   (offline pins are removed by the caller, not rendered)
 //
-// Zero telemetry: the 3D earth texture and the 2D world outline are bundled
+// Zero telemetry: the 3D earth texture and the world outline are bundled
 // locally under src/assets/ — no CDN, no map-tile servers.
 
 const COLOR_SELF = '#3b9dff'
@@ -32,26 +34,10 @@ function webglAvailable () {
   }
 }
 
-// Renderer selection. Default is the 2D canvas map — it always works (no WebGL
-// needed) and is fully offline. The 3D WebGL globe is opt-in because some Linux
-// GPU/driver combos block WebGL context creation in the Pear/Electron window
-// and Pear gives app code no way to inject Chromium flags. Force 3D by adding
-// `?globe=3d` to the window URL (or localStorage 'globe' = '3d'); force 2D with
-// `?globe=2d`. When 3D is requested but the context can't be created, we fall
-// back to 2D automatically.
-function wants3D () {
-  try {
-    const q = (typeof window !== 'undefined' && window.location && window.location.search) || ''
-    if (/[?&]globe=2d/.test(q)) return false
-    if (/[?&]globe=3d/.test(q)) return true
-    const stored = (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('globe'))
-    if (stored === '3d') return true
-    if (stored === '2d') return false
-  } catch { /* ignore */ }
-  // Default to the 3D globe on Android; desktop keeps the lightweight 2D map.
-  try { if (/Android/i.test(navigator.userAgent)) return true } catch { /* ignore */ }
-  return false // default: 2D
-}
+// Renderer selection used to live here (wants3D / ?globe=3d / localStorage
+// 'globe'). Selection now happens in the dispatcher (renderer.js) which reads
+// the user's chosen map style from src/map-styles.js. Both renderers expose
+// the same interface, so callers need no changes.
 
 // Inverted-teardrop (map-pin) point geometry. three-globe hardcodes its points
 // as cylinders with no geometry accessor, so we swap each point mesh's geometry
@@ -84,9 +70,39 @@ function contactColor (id, dim) {
   return dim ? `hsla(${hue}, 60%, 45%, 0.5)` : `hsl(${hue}, 75%, 62%)`
 }
 
-export function createGlobeRenderer (container, { onPinClick } = {}) {
-  if (!wants3D()) return create2DRenderer(container, { onPinClick })
-  if (!webglAvailable()) return create2DRenderer(container, { onPinClick })
+// Stable per-country color for the "colored countries" style (hue hashed from
+// the feature index — the bundled data has no properties). `dim` produces a
+// darker, more saturated fill so borders stay readable.
+const countryColorCache = new Map()
+function countryColor (index, dim) {
+  const key = dim ? 'd' + index : 'b' + index
+  if (countryColorCache.has(key)) return countryColorCache.get(key)
+  let h = 2654435761
+  h = ((h * 33) + index * 2654435761) >>> 0
+  const hue = h % 360
+  const c = dim ? `hsl(${hue}, 65%, 42%)` : `hsl(${hue}, 62%, 52%)`
+  countryColorCache.set(key, c)
+  return c
+}
+
+// Pre-build feature -> index lookups once (features are stable module data).
+const featureIndex = new Map()
+WORLD.features.forEach((f, i) => featureIndex.set(f, i))
+
+// A per-country fill color accessor that three-globe calls with each feature.
+const countryCapColor = (d) => {
+  const i = featureIndex.get(d)
+  return countryColor(typeof i === 'number' ? i : 0, false)
+}
+
+export function createGlobeRenderer (container, { onPinClick, style } = {}) {
+  // 3D globe only. Map styles and WebGL unavailability are handled by the
+  // dispatcher / fallback in the caller.
+  if (!webglAvailable()) throw new Error('webgl-unavailable')
+
+  const isTexture = style === 'globe-texture'
+  const isCountries = style === 'globe-countries'
+  const isWireframe = !isTexture && !isCountries
 
   let globe
   try {
@@ -107,23 +123,54 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
       .arcStroke(0.5)
       .arcAltitudeAutoScale(0.3)
       .polygonsData(WORLD.features)
-      .polygonCapColor(() => 'rgba(0,0,0,0)')
-      .polygonSideColor(() => 'rgba(0,0,0,0)')
-      .polygonStrokeColor(() => 'rgba(148,163,184,0.5)')
       .polygonAltitude(0.001)
       .onPointClick((pt) => { if (onPinClick && pt && pt.data) onPinClick(pt.data) })
+
+    if (isTexture) {
+      // Full-color Blue Marble earth (bundled locally — no network calls).
+      globe.globeImageUrl('./assets/earth-blue-marble.jpg')
+      globe
+        .polygonCapColor(() => 'rgba(0,0,0,0)')
+        .polygonSideColor(() => 'rgba(0,0,0,0)')
+        .polygonStrokeColor(() => 'rgba(255,255,255,0.18)')
+    } else if (isCountries) {
+      // Distinct country fills on a blue-ocean sphere for legibility. Each
+      // country's side wall is its own color (no transparent seams), and the
+      // altitude is raised so the plates sit clearly above the water instead
+      // of z-fighting/tiling against the sphere.
+      globe
+        .polygonAltitude(0.004)
+        .polygonCapColor(countryCapColor)
+        .polygonSideColor(countryCapColor)
+        .polygonStrokeColor(() => 'rgba(5,15,30,0.4)')
+    } else {
+      // Wireframe: transparent countries, borders drawn as lines.
+      globe
+        .polygonCapColor(() => 'rgba(0,0,0,0)')
+        .polygonSideColor(() => 'rgba(0,0,0,0)')
+        .polygonStrokeColor(() => 'rgba(148,163,184,0.5)')
+    }
   } catch (err) {
     // THREE.WebGLRenderer throws when the WebGL context can't be created even
-    // though the pre-check passed — fall back to the 2D canvas map.
+    // though the pre-check passed.
     console.error('[globe] 3D init failed:', err && err.message)
-    return create2DRenderer(container, { onPinClick })
+    throw err
   }
 
-  // Plain dark sphere + country borders drawn as lines (Natural Earth 110m,
-  // bundled locally — no network calls). Pins stay colored on top.
+  // Configure the earth surface per style.
   try {
     const mat = globe.globeMaterial()
-    if (mat) mat.color = new THREE.Color('#0a1a2e')
+    if (mat) {
+      if (isTexture) {
+        // Let the texture show; tone down the tint multiplier.
+        mat.color = new THREE.Color('#ffffff')
+      } else if (isCountries) {
+        mat.color = new THREE.Color('#123c6b') // blue water under the countries
+      } else {
+        mat.color = new THREE.Color('#0a1a2e') // dark sphere + border lines
+      }
+      mat.needsUpdate = true
+    }
   } catch { /* non-fatal */ }
 
   const pins = new Map() // id -> { id, lat, lng, alt, color, size, data }

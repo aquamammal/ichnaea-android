@@ -1,11 +1,14 @@
-// 2D canvas fallback map. Used when WebGL is unavailable (some Linux
-// GPU/driver combos block context creation in the Pear/Electron window).
-// Draws the same data the 3D globe would — self pin, contact pins, dotted
-// arcs — on a plain 2D canvas using a simple equirectangular projection.
+// 2D canvas map renderer. Draws the same data the 3D globe would — self pin,
+// contact pins, dotted arcs — on a plain 2D canvas, with a user-selectable
+// projection (src/map-styles.js / renderer.js):
+//   - map         : equirectangular centered on Taiwan (~121°E) — the default "Map"
+//   - map-center  : equirectangular centered on the user's current check-in
+//   - map-dymaxion: Buckminster Fuller's Airocean ("Dymaxion") projection
 //
-// Fully offline / zero-telemetry: the world outline is the bundled Natural
-// Earth 110m countries data (public domain), imported as a module from
-// src/assets/world.js — no runtime fetch, no map tiles, no CDN.
+// Projections come from d3-geo + d3-geo-polygon (bundled locally — no runtime
+// fetch, no map tiles, no CDN). The world outline is the bundled Natural Earth
+// 110m countries data (public domain), imported as a module from
+// src/assets/world.js.
 //
 //   self pin     -> blue
 //   active       -> green
@@ -13,6 +16,8 @@
 //   (offline pins are removed by the caller, not rendered)
 
 import WORLD from './assets/world.js'
+import { geoEquirectangular, geoPath, geoGraticule10 } from 'd3-geo'
+import { geoAirocean } from 'd3-geo-polygon'
 
 const COLOR_SELF = '#3b9dff'
 const COLOR_ACTIVE = '#3ddc84'
@@ -25,13 +30,6 @@ const COLOR_GRID = 'rgba(255,255,255,0.05)'
 
 const HIT_RADIUS_PX = 10
 
-export function create2DRenderer (container, { onPinClick } = {}) {
-  const canvas = document.createElement('canvas')
-  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;'
-  container.style.position = 'relative'
-  container.appendChild(canvas)
-  const ctx = canvas.getContext('2d')
-
 function contactColor (id, dim) {
   let h = 2165387
   for (let i = 0; i < id.length; i++) h = ((h * 31) + id.charCodeAt(i)) >>> 0
@@ -39,23 +37,53 @@ function contactColor (id, dim) {
   return dim ? `hsla(${hue}, 60%, 45%, 0.55)` : `hsl(${hue}, 75%, 58%)`
 }
 
+// Build the d3 projection for a given 2D style id. `center` ({lat,lng}) is used
+// by the self-centered style so the projection pivots on the user's location.
+function makeProjection (styleId, width, height, center) {
+  const sphere = { type: 'Sphere' }
+  let proj
+  if (styleId === 'map-dymaxion') {
+    proj = geoAirocean()
+  } else if (styleId === 'map-center' && center) {
+    proj = geoEquirectangular().rotate([-center.lng, -center.lat])
+  } else {
+    // Default "Map" — centered on Taiwan (~121°E, ~23.5°N).
+    proj = geoEquirectangular().rotate([-121, -23.5])
+  }
+  return proj.fitSize([width, height], sphere)
+}
+
+export function create2DRenderer (container, { onPinClick, style } = {}) {
+  const styleId = style || 'map-world'
+  const canvas = document.createElement('canvas')
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;'
+  container.style.position = 'relative'
+  container.appendChild(canvas)
+  const ctx = canvas.getContext('2d')
+
   const pins = new Map() // id -> { id, lat, lng, color, data }
   let selfLoc = null
   let pinScale = 1
-  const world = WORLD // bundled Natural Earth FeatureCollection (no fetch needed)
+  const graticule = geoGraticule10()
 
-  // View transform: the equirectangular world map is drawn into a rect of
-  // `scale` pixels per degree, offset by (ox, oy). Fitted to the container.
-  let scale = 1
-  let ox = 0
-  let oy = 0
+  let proj = null
+  let path = null
+  let baseScale = 1
+  let baseTranslate = [0, 0]
+  // Cached, resolution-independent base-projection shapes (land + graticule).
+  // Rebuilding geoPath for all 177 countries every frame is slow (Airocean
+  // clips each polygon into many pieces) — that's what made Dymaxion choppy.
+  // We render them once per fit, then on each frame only apply the affine
+  // zoom/pan transform. Falls back to live re-projection when Path2D is absent.
+  const canCache = typeof Path2D === 'function'
+  let landPath = null
+  let gridPath = null
+  // Interactive view: zoom is a relative multiplier on baseScale; panX/panY are
+  // pixel offsets added to the projection's translate.
+  let zoom = 1
+  let panX = 0
+  let panY = 0
   let userZoomed = false
-
-  // --- projection -------------------------------------------------------------
-  // Equirectangular (plate carrée): lng -> x linear, lat -> y linear (top = 90N).
-  function project (lat, lng) {
-    return { x: ox + (lng + 180) * scale, y: oy + (90 - lat) * scale }
-  }
 
   // Logical (CSS-pixel) drawing dimensions, independent of layout timing.
   function dims () {
@@ -65,12 +93,92 @@ function contactColor (id, dim) {
     return { w, h }
   }
 
-  function fitView () {
-    // World spans 360 x 180 degrees; fit inside the canvas with a small margin.
+  function applyView () {
+    proj.scale(baseScale * zoom)
+    proj.translate([baseTranslate[0] + panX, baseTranslate[1] + panY])
+  }
+
+  function fitView (center) {
     const { w, h } = dims()
-    scale = Math.min(w / 360, h / 180) * 0.98
-    ox = (w - 360 * scale) / 2
-    oy = (h - 180 * scale) / 2
+    const sphere = { type: 'Sphere' }
+    proj = makeProjection(styleId, w, h, center)
+    path = geoPath(proj, ctx)
+    baseScale = proj.scale()
+    baseTranslate = proj.translate()
+    zoom = 1
+    panX = 0
+    panY = 0
+    applyView()
+
+    // Cache base-projection shapes so per-frame redraw is just an affine blit.
+    if (canCache) {
+      try {
+        const gen = geoPath(proj) // string generator (no ctx)
+        gridPath = new Path2D(gen(graticule))
+        landPath = new Path2D()
+        for (const f of WORLD.features) {
+          const g = f.geometry
+          if (!g) continue
+          landPath.addPath(new Path2D(gen(g)))
+        }
+      } catch (err) {
+        // Some WebViews lack Path2D.addPath or throw on huge strings — degrade
+        // gracefully to per-frame re-projection.
+        console.warn('[map] Path2D cache failed, falling back to re-projection:', err && err.message)
+        landPath = null
+        gridPath = null
+      }
+    }
+  }
+
+  // Project a lat/lng to screen pixel, or null if the projection clips it out.
+  function project (lat, lng) {
+    const p = proj([lng, lat])
+    if (!p || !isFinite(p[0]) || !isFinite(p[1])) return null
+    return { x: p[0], y: p[1] }
+  }
+
+  // Draw the cached base-projection land + graticule, transformed to the current
+  // zoom/pan. Base pixel b maps to screen as zoom*b + pan + (1-zoom)*baseTranslate,
+  // i.e. translate then scale.
+  function drawBaseShapes () {
+    const tx = panX + (1 - zoom) * baseTranslate[0]
+    const ty = panY + (1 - zoom) * baseTranslate[1]
+    ctx.save()
+    ctx.translate(tx, ty)
+    ctx.scale(zoom, zoom)
+    // Graticule
+    ctx.strokeStyle = COLOR_GRID
+    ctx.lineWidth = 1 / zoom
+    ctx.stroke(gridPath)
+    // Landmass
+    ctx.fillStyle = COLOR_LAND
+    ctx.fill(landPath, 'evenodd')
+    ctx.strokeStyle = COLOR_LAND_STROKE
+    ctx.lineWidth = 1 / zoom
+    ctx.stroke(landPath)
+    ctx.restore()
+  }
+
+  // Fallback: re-project the world every frame (used when Path2D is unavailable).
+  function drawBaseShapesLive () {
+    ctx.strokeStyle = COLOR_GRID
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    path(graticule)
+    ctx.stroke()
+
+    ctx.fillStyle = COLOR_LAND
+    ctx.strokeStyle = COLOR_LAND_STROKE
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    for (const f of WORLD.features) {
+      const g = f.geometry
+      if (!g) continue
+      path(g)
+    }
+    ctx.fill('evenodd')
+    ctx.stroke()
   }
 
   // --- drawing ----------------------------------------------------------------
@@ -79,69 +187,41 @@ function contactColor (id, dim) {
     const { w, h } = dims()
     ctx.clearRect(0, 0, w, h)
 
-    // Ocean + graticule
+    // Ocean + landmass + graticule
     ctx.fillStyle = COLOR_OCEAN
     ctx.fillRect(0, 0, w, h)
-    ctx.strokeStyle = COLOR_GRID
-    ctx.lineWidth = 1
-    for (let lng = -180; lng <= 180; lng += 30) {
-      const a = project(-90, lng); const b = project(90, lng)
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
-    }
-    for (let lat = -60; lat <= 60; lat += 30) {
-      const a = project(lat, -180); const b = project(lat, 180)
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
-    }
-
-    // Landmass (Natural Earth 110m countries)
-    ctx.fillStyle = COLOR_LAND
-    ctx.strokeStyle = COLOR_LAND_STROKE
-    ctx.lineWidth = 1
-    for (const f of world.features) {
-      const g = f.geometry
-      if (!g) continue
-      if (g.type === 'Polygon') drawPolygon(g.coordinates)
-      else if (g.type === 'MultiPolygon') for (const poly of g.coordinates) drawPolygon(poly)
-    }
+    if (canCache && landPath && gridPath) drawBaseShapes()
+    else drawBaseShapesLive()
 
     // Dotted arcs from self to each contact (straight lines in this projection).
     if (selfLoc) {
       const a = project(selfLoc.lat, selfLoc.lng)
-      ctx.setLineDash([4, 5])
-      ctx.lineWidth = 1.5
-      for (const p of pins.values()) {
-        if (p.id === 'self') continue
-        const b = project(p.lat, p.lng)
-        ctx.strokeStyle = p.color
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+      if (a) {
+        ctx.setLineDash([4, 5])
+        ctx.lineWidth = 1.5
+        for (const p of pins.values()) {
+          if (p.id === 'self') continue
+          const b = project(p.lat, p.lng)
+          if (!b) continue
+          ctx.strokeStyle = p.color
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+        }
+        ctx.setLineDash([])
       }
-      ctx.setLineDash([])
     }
 
     // Pins (contacts first, self on top).
     const ordered = [...pins.values()].sort((a, b) => (a.id === 'self' ? 1 : 0) - (b.id === 'self' ? 1 : 0))
     for (const p of ordered) {
-      const { x, y } = project(p.lat, p.lng)
+      const pt = project(p.lat, p.lng)
+      if (!pt) continue
       const r = (p.id === 'self' ? 6 : 5) * pinScale
-      ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, Math.PI * 2)
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, r + 2.5, 0, Math.PI * 2)
       ctx.fillStyle = p.color + '33'; ctx.fill() // soft halo
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2)
       ctx.fillStyle = p.color; ctx.fill()
       ctx.lineWidth = 1.5; ctx.strokeStyle = '#05080d'; ctx.stroke()
     }
-  }
-
-  function drawPolygon (rings) {
-    ctx.beginPath()
-    for (const ring of rings) {
-      for (let i = 0; i < ring.length; i++) {
-        const { x, y } = project(ring[i][1], ring[i][0])
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-      }
-      ctx.closePath()
-    }
-    ctx.fill()
-    ctx.stroke()
   }
 
   // --- hit testing --------------------------------------------------------------
@@ -149,16 +229,17 @@ function contactColor (id, dim) {
     let best = null
     let bestD = HIT_RADIUS_PX
     for (const p of pins.values()) {
-      const { x, y } = project(p.lat, p.lng)
-      const d = Math.hypot(x - mx, y - my)
+      const pt = project(p.lat, p.lng)
+      if (!pt) continue
+      const d = Math.hypot(pt.x - mx, pt.y - my)
       if (d <= bestD) { best = p; bestD = d }
     }
     return best
   }
 
   // --- interaction: click pins, drag-pan, pinch/wheel-zoom ---------------------
-  let drag = null // { x, y, ox, oy, moved }
-  let pinch = null // { dist, midX, midY, scale } — two-finger zoom
+  let drag = null // { x, y, panX, panY, moved }
+  let pinch = null // { dist, midX, midY, zoom, panX, panY }
 
   function eventPos (e) {
     const r = canvas.getBoundingClientRect()
@@ -182,20 +263,26 @@ function contactColor (id, dim) {
     }
   }
 
-  const minScale = () => (canvas.clientWidth || 1) / 360 * 0.5
+  const clampZoom = (z) => Math.min(Math.max(z, 0.5), 40)
 
-  function zoomAt (p, ns) {
-    // Keep the world point under p fixed while changing scale.
-    ox = p.x - (p.x - ox) * (ns / scale)
-    oy = p.y - (p.y - oy) * (ns / scale)
-    scale = ns
+  function zoomAt (px, py, nzoom) {
+    const before = proj.invert([px, py]) // geographic point under the cursor
+    zoom = clampZoom(nzoom)
+    applyView()
+    if (before) {
+      const after = proj(before)
+      // Shift the view so the same geographic point stays under the cursor.
+      panX += px - after[0]
+      panY += py - after[1]
+      applyView()
+    }
     userZoomed = true
     draw()
   }
 
   canvas.addEventListener('mousedown', (e) => {
     const p = eventPos(e)
-    drag = { x: p.x, y: p.y, ox, oy, moved: false }
+    drag = { x: p.x, y: p.y, panX, panY, moved: false }
     canvas.style.cursor = 'grabbing'
   })
   // Touch: drag-pan with one finger, pinch-zoom with two.
@@ -203,27 +290,21 @@ function contactColor (id, dim) {
     if (e.touches.length === 2) {
       e.preventDefault()
       const p = pinchInfo(e)
-      pinch = { dist: p.dist, midX: p.midX, midY: p.midY, scale }
+      pinch = { dist: p.dist, midX: p.midX, midY: p.midY, zoom, panX, panY }
       drag = null
       return
     }
     if (e.touches.length !== 1) return
     e.preventDefault()
     const p = touchPos(e)
-    if (p) drag = { x: p.x, y: p.y, ox, oy, moved: false }
+    if (p) drag = { x: p.x, y: p.y, panX, panY, moved: false }
   }, { passive: false })
   canvas.addEventListener('touchmove', (e) => {
     if (pinch && e.touches.length === 2) {
       e.preventDefault()
       const p = pinchInfo(e)
       const factor = p.dist / pinch.dist
-      const ns = Math.min(Math.max(pinch.scale * factor, minScale()), pinch.scale * 20)
-      // Zoom around the midpoint where the pinch started.
-      ox = pinch.midX - (pinch.midX - ox) * (ns / scale)
-      oy = pinch.midY - (pinch.midY - oy) * (ns / scale)
-      scale = ns
-      userZoomed = true
-      draw()
+      zoomAt(p.midX, p.midY, pinch.zoom * factor)
       return
     }
     if (!drag || e.touches.length !== 1) return
@@ -233,8 +314,10 @@ function contactColor (id, dim) {
     const dx = p.x - drag.x
     const dy = p.y - drag.y
     if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true
-    ox = drag.ox + dx
-    oy = drag.oy + dy
+    panX = drag.panX + dx
+    panY = drag.panY + dy
+    userZoomed = true
+    applyView()
     draw()
   }, { passive: false })
   if (typeof window !== 'undefined') {
@@ -244,8 +327,10 @@ function contactColor (id, dim) {
       const dx = p.x - drag.x
       const dy = p.y - drag.y
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true
-      ox = drag.ox + dx
-      oy = drag.oy + dy
+      panX = drag.panX + dx
+      panY = drag.panY + dy
+      userZoomed = true
+      applyView()
       draw()
     })
     window.addEventListener('mouseup', (e) => {
@@ -274,12 +359,16 @@ function contactColor (id, dim) {
     e.preventDefault()
     const p = eventPos(e)
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-    const ns = Math.min(Math.max(scale * factor, minScale()), scale * 20)
-    zoomAt(p, ns)
+    zoomAt(p.x, p.y, zoom * factor)
   }, { passive: false })
+
   // --- public API (same shape as the 3D renderer) --------------------------------
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }
+    // For the self-centered style, recenter the projection on the new location.
+    if (styleId === 'map-center') {
+      fitView(selfLoc)
+    }
     pins.set('self', { id: 'self', lat, lng, color: COLOR_SELF, data: { self: true, lat, lng } })
     draw()
   }
@@ -305,16 +394,12 @@ function contactColor (id, dim) {
 
   function resize () {
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
-    // #globe is position:fixed;inset:0 (viewport-sized). Read the viewport
-    // directly so we never depend on layout timing (clientWidth/Height can be
-    // 0 if resize() runs before first layout). Fall back to the container.
     const vw = (typeof window !== 'undefined' && window.innerWidth) || 0
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 0
     const w = container.clientWidth || vw || 1
     const h = container.clientHeight || vh || 1
     canvas.width = Math.round(w * dpr)
     canvas.height = Math.round(h * dpr)
-    // Keep the CSS box in sync so clientWidth/Height match the backing store.
     canvas.style.width = w + 'px'
     canvas.style.height = h + 'px'
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -325,8 +410,6 @@ function contactColor (id, dim) {
   resize()
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', resize)
-    // Re-fit once layout has definitely happened (boot can run before first
-    // paint, when clientWidth/Height may still be 0).
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(() => { userZoomed = false; resize() })
     }

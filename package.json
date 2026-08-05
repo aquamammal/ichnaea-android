@@ -1,7 +1,7 @@
 {
   "name": "ichnaea-android",
-  "version": "0.1.0",
-  "description": "Ichnaea Android port \u2014 P2P privacy-first location check-ins with E2E encryption",
+  "version": "0.2.0",
+  "description": "Ichnaea Android port — P2P privacy-first location check-ins with E2E encryption",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
@@ -19,6 +19,7 @@
     "@capacitor/geolocation": "^6.0.0",
     "b4a": "^1.8.1",
     "compact-encoding": "^3.3.0",
+    "d3-geo-polygon": "^1.12.1",
     "globe.gl": "^2.46.1",
     "hypercore": "^10.38.2",
     "hypercore-crypto": "^3.7.0",

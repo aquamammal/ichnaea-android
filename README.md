@@ -49,7 +49,7 @@ Or open `android/` in Android Studio and press Run.
 ## Development
 
 - `npm run build:node` — bundle the Node P2P stack (`src/node/server.js`) → `android/app/src/main/assets/nodejs-project/bundle.cjs`.
-- `npm run build:renderer` — bundle the WebView renderer (`src/main.js` + globe.gl) → `src/main.bundle.js`.
+- `npm run build:renderer` — bundle the WebView renderer (`src/main.js` + globe.gl + d3-geo-polygon) → `src/main.bundle.js`.
 - `npm run node:start` — run the Node bridge on desktop (test with a browser pointed at `ws://localhost:14770`).
 - `npm test` — shared unit tests (crypto, staleness).
 
@@ -57,7 +57,7 @@ Or open `android/` in Android Studio and press Run.
 
 - `src/node/server.js` — NodeJS-Mobile entrypoint: WebSocket server on `localhost:14770`, boots the P2P app once, re-targets the pipe per renderer connection.
 - `src/main/` — shared P2P stack (Hyperswarm, Hypercore, identity, contacts, settings, scheduler, E2E encryption). Same code as the desktop version, bundled for Node 12.
-- `src/main.js`, `src/index.html`, `src/staleness.js`, `src/globe-renderer.js`, `src/map2d.js`, `src/assets/` — WebView UI, bundled with esbuild (browsers can't resolve bare imports like `globe.gl`).
+- `src/main.js`, `src/index.html`, `src/staleness.js`, `src/renderer.js`, `src/map-styles.js`, `src/globe-renderer.js`, `src/map2d.js`, `src/assets/` — WebView UI, bundled with esbuild (browsers can't resolve bare imports like `globe.gl`). `src/renderer.js` dispatches on the user-selected **map style** (`src/map-styles.js`): three 3D globe looks (wireframe / full-color Blue Marble / colored countries + blue water) and three 2D maps (world / Taiwan-centered / Dymaxion, via `d3-geo` + `d3-geo-polygon`). Picked in Settings, persisted in localStorage, applied on reload.
 - `android/app/src/main/cpp/` — JNI bridge: starts Node via the embedder API, redirects stdout/stderr to logcat.
 - `android/app/src/main/jniLibs/arm64-v8a/` — `libnode.so`, `libc++_shared.so`, plus the compiled JNI lib.
 - `android/app/src/main/assets/nodejs-project/` — the bundled Node stack.
@@ -70,6 +70,26 @@ The app runs the P2P stack in a **ForegroundService** (persistent notification) 
 - **Connectivity hooks** — a `ConnectivityManager.NetworkCallback` in `NodeService.java` watches the network. On connectivity loss it sends `suspend` to Node; on a Wi-Fi ↔ cellular transport switch it "bounces" the swarm (`suspend` then `resume` ~2.5s later). Node receives these over a **stdin control channel** (a socketpair wired in the JNI bridge) and calls Hyperswarm's `swarm.suspend()` / `swarm.resume()`, so the DHT re-binds sockets and re-announces topics instead of silently dropping off.
 - **Multicast lock** — `WifiManager.MulticastLock` is held so local-area UDP multicast (Hyperswarm's LAN peer discovery) works.
 - **Battery exemption** — `MainActivity` asks the user to disable battery optimization (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) so Doze doesn't freeze the service.
+
+## Map styles
+
+The renderer supports six user-selectable views, picked in **Settings → Map style** (persisted in localStorage, applied on reload; the hidden dev panel has a "Next map" cycler):
+
+| Style | Kind | Look |
+|---|---|---|
+| Globe — Wireframe | 3D | dark sphere + country border lines (default) |
+| Globe — Full Color | 3D | bundled Blue Marble earth texture |
+| Globe — Colored Countries | 3D | distinct country fills over blue water |
+| Map | 2D | equirectangular centered on Taiwan (~121°E) |
+| Map — Centered on Me | 2D | equirectangular centered on your current check-in location |
+| Map — Dymaxion | 2D | Buckminster Fuller's Airocean ("Dymaxion") projection |
+
+- `src/map-styles.js` — the style registry + persistence (`mapStyle` key, backward-compatible with the old `globe` 3d/2d key and the older `map-world`/`map-taiwan` ids).
+- `src/renderer.js` — the dispatcher: picks 3D vs 2D from the chosen style; if a globe style is selected but WebGL is unavailable, it transparently falls back to the 2D map.
+- `src/globe-renderer.js` — the 3D globe, styled by id (wireframe / texture / colored countries).
+- `src/map2d.js` — the 2D canvas map, using `d3-geo` projections (`geoEquirectangular` for Map / Centered-on-Me, `geoAirocean` for Dymaxion) with pan, pinch/wheel zoom, and pin hit-testing via `projection.invert`. The Centered-on-Me style re-centers on the self pin whenever you check in.
+
+All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 
 ## Native addon fixes (important for rebuilds)
 
@@ -91,8 +111,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.1.0-debug.apk
-- SHA-256: `5cc41b7d47bd75b65133145a0058766caa89b1e292ba1ba835cb2483b1c70e5d`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.0-debug.apk
+- SHA-256: `e0ea7e2c7087db45172aaebeb509bc0d999fd4eefd24b0e991e41bc19f836efb`
 
 Or build it yourself from this repo:
 

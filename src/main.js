@@ -1,5 +1,6 @@
 import { classify, humanize, formatLocal, STATUS } from './staleness.js'
-import { createGlobeRenderer } from './globe-renderer.js'
+import { createRenderer } from './renderer.js'
+import { MAP_STYLES, getMapStyleId, setMapStyleId } from './map-styles.js'
 
 // Renderer for Ichnaea Android. This is a THIN PIPE CLIENT: it owns only the
 // globe, the UI, and geolocation. ALL P2P state (identity, contacts, the local
@@ -13,7 +14,7 @@ const els = {
   myPubkey: $('my-pubkey'), contactsList: $('contacts-list'),
   panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
   modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'),
-  modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'),
+  modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
   pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'),
@@ -51,7 +52,7 @@ const state = {
 
 // --- globe -------------------------------------------------------------------
 function initGlobe () {
-  state.globe = createGlobeRenderer($('globe'), { onPinClick: showPinOverlay })
+  state.globe = createRenderer($('globe'), { onPinClick: showPinOverlay })
 }
 
 function showPinOverlay (data) {
@@ -263,6 +264,15 @@ function initUI () {
   }
   els.setInterval.value = String(state.intervalMs)
 
+  const currentStyle = getMapStyleId()
+  for (const s of MAP_STYLES) {
+    const o = document.createElement('option')
+    o.value = s.id
+    o.textContent = s.name
+    if (s.id === currentStyle) o.selected = true
+    els.setMapStyle.appendChild(o)
+  }
+
   $('btn-add-contact').addEventListener('click', () => openModal(els.modalAdd))
   $('btn-settings').addEventListener('click', () => {
     els.setInterval.value = String(state.intervalMs)
@@ -312,35 +322,27 @@ function initUI () {
     } catch { toast('Copy failed \u2014 select and copy manually') }
   })
 
-  els.versionTag.addEventListener('dblclick', () => { syncGlobeToggleLabel(); els.devPanel.classList.toggle('open') })
+  els.versionTag.addEventListener('dblclick', () => { syncStyleToggleLabel(); els.devPanel.classList.toggle('open') })
   $('btn-dev-close').addEventListener('click', () => els.devPanel.classList.remove('open'))
   $('btn-force-200').addEventListener('click', onForce200)
-  $('btn-toggle-globe').addEventListener('click', onToggleGlobe)
+  $('btn-toggle-globe').addEventListener('click', onCycleMapStyle)
 }
 
-function currentGlobeMode () {
-  try {
-    const q = (window.location && window.location.search) || ''
-    if (/[?&]globe=3d/.test(q)) return '3d'
-    if (/[?&]globe=2d/.test(q)) return '2d'
-    const stored = window.localStorage && window.localStorage.getItem('globe')
-    if (stored === '3d') return '3d'
-    if (stored === '2d') return '2d'
-  } catch { /* ignore */ }
-  // Default to the 3D globe on mobile; desktop keeps the lightweight 2D map.
-  try { if (/Android/i.test(navigator.userAgent)) return '3d' } catch { /* ignore */ }
-  return '2d'
-}
-
-function syncGlobeToggleLabel () {
+function syncStyleToggleLabel () {
   const btn = $('btn-toggle-globe')
-  if (btn) btn.textContent = currentGlobeMode() === '3d' ? 'Use 2D map' : 'Try 3D globe'
+  if (!btn) return
+  const cur = getMapStyleId()
+  const i = MAP_STYLES.findIndex((s) => s.id === cur)
+  const next = MAP_STYLES[(i + 1) % MAP_STYLES.length]
+  btn.textContent = 'Next map: ' + next.name
 }
 
-function onToggleGlobe () {
-  const next = currentGlobeMode() === '3d' ? '2d' : '3d'
-  try { window.localStorage.setItem('globe', next) } catch { /* ignore */ }
-  toast(next === '3d' ? 'Reloading with 3D globe\u2026' : 'Reloading with 2D map\u2026')
+function onCycleMapStyle () {
+  const cur = getMapStyleId()
+  const i = MAP_STYLES.findIndex((s) => s.id === cur)
+  const next = MAP_STYLES[(i + 1) % MAP_STYLES.length]
+  setMapStyleId(next.id)
+  toast('Map: ' + next.name + '\u2026')
   setTimeout(() => window.location.reload(), 300)
 }
 
@@ -384,6 +386,11 @@ async function onSaveSettings () {
     state.intervalMs = res.intervalMs
     closeModal(els.modalSet)
     toast('Settings saved')
+    // Map style change needs a reload (the renderer is built once at boot).
+    if (els.setMapStyle.value && els.setMapStyle.value !== getMapStyleId()) {
+      setMapStyleId(els.setMapStyle.value)
+      setTimeout(() => window.location.reload(), 400)
+    }
   } catch (err) {
     els.setErr.textContent = String(err.message || err)
   }

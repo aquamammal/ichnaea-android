@@ -210,6 +210,10 @@
         <select id="set-interval"></select>
         <div class="label" style="margin-top:8px">Lower frequency saves battery. Default is 1 day.</div>
 
+        <label for="set-mapstyle" style="margin-top:14px">Map style</label>
+        <select id="set-mapstyle"></select>
+        <div class="label" style="margin-top:8px">Wireframe globe, full-color globe, colored countries, or a flat map. Applies on save.</div>
+
         <h3 style="margin-top:18px">Manual location</h3>
         <div class="label">Override GPS, or check in when there is no GPS.</div>
         <div class="row" style="gap:8px">
@@ -245,15 +249,15 @@
     <!-- Hidden dev panel (double-tap version tag to open) -->
     <div class="panel" id="dev-panel">
       <h2>Dev Settings</h2>
-      <div class="row"><button id="btn-toggle-globe">Try 3D globe</button></div>
+      <div class="row"><button id="btn-toggle-globe">Next map</button></div>
       <div class="row"><button id="btn-force-200">Force 200 check-ins</button></div>
       <div class="row"><button id="btn-dev-close">Close</button></div>
       <div class="label" id="dev-status"></div>
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.1.0</div>
+    <div id="version-tag">ichnaea-android v0.2.0</div>
 
-    <script type="module" src="./main.bundle.js?v=1785902614287"></script>
+    <script type="module" src="./main.bundle.js?v=1785907450973"></script>
   </body>
 </html>
