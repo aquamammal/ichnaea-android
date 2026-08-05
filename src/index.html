@@ -114,6 +114,7 @@
       .modal-backdrop.open { display: flex; }
       .modal {
         width: 380px; max-width: calc(100vw - 40px);
+        max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain;
         background: #0d141c; border: 1px solid var(--border);
         border-radius: 14px; padding: 18px;
       }
@@ -124,7 +125,13 @@
         border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px;
       }
       .modal select.freq-num { width: 90px; flex: none; }
-      .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
+      /* Pin the action buttons (Cancel / Save) to the bottom so a tall modal
+         never pushes them off-screen; content scrolls behind them. */
+      .modal .actions {
+        position: sticky; bottom: -18px; z-index: 2;
+        display: flex; gap: 8px; margin: 16px -18px -18px; padding: 10px 18px 18px;
+        background: #0d141c; border-top: 1px solid var(--border);
+      }
       .form-error { color: var(--danger); font-size: 12px; min-height: 16px; margin-top: 8px; }
 
       /* pin overlay card */
