@@ -100,6 +100,10 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Name yourself** — **Settings → Your name** is sent with every check-in, so contacts see who you are. They can still rename you locally; your name appears under whatever nickname they chose.
 
+**Safety-number fingerprint verification** — every contact shows a short **4-word fingerprint** (`src/fingerprint.js`): in the contacts list, on the pin overlay, and **live in the Add Contact modal** as you type/scan a key. It's derived purely from the contact's public key, so you can compare it with your friend over a second, independent channel *before* sharing real location — this catches a key substituted during the out-of-band exchange.
+
+**Location precision dial** — **Settings → Location precision** snaps your broadcast coordinates onto a **~5 / 10 / 25 / 50 km grid** (Off = exact position), applied to both scheduled and manual check-ins, so you can share only an approximate area.
+
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
 
 **Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists (with a tap-to-download link). It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry).
@@ -131,7 +135,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.1-debug.apk
-- SHA-256: `f43c21123b9b7f299c673f8ad0565b7d1df94e8480bc9b6d032ad65499ff9e23`
+- SHA-256: `36979cfdadfcf81ae2de392b88834c35ba518c5bcd81fb5edec7718c44cece5a`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.

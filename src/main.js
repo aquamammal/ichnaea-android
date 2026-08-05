@@ -4,6 +4,7 @@ import { MAP_STYLES, getMapStyleId, setMapStyleId, getColored, setColored, getAr
 import QRCode from 'qrcode/lib/browser.js'
 import { openScanner } from './scanner.js'
 import { checkForUpdates } from './updates.js'
+import { fingerprint } from './fingerprint.js'
 
 // Renderer for Ichnaea Android. This is a THIN PIPE CLIENT: it owns only the
 // globe, the UI, and geolocation. ALL P2P state (identity, contacts, the local
@@ -19,14 +20,15 @@ const els = {
   colorToggle: $('btn-color-countries'), colorVal: $('color-countries-val'),
   arcsToggle: $('btn-arcs'), arcsVal: $('arcs-val'),
   panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
-  modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'), btnScanQr: $('btn-scan-qr'),
+  modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'), addFingerprint: $('add-fingerprint'), btnScanQr: $('btn-scan-qr'),
   modalSet: $('modal-settings'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
   setFreqMin: $('set-freq-min'), setFreqUnit: $('set-freq-unit'), freqDisplay: $('freq-display'),
+  setPrecision: $('set-precision'),
   setSelfName: $('set-selfname'),
   btnCheckUpdates: $('btn-check-updates'), updatesStatus: $('updates-status'), updatesDetail: $('updates-detail'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
-  pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'),
+  pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'), pinFingerprint: $('pin-fingerprint'),
   toast: $('toast'), devPanel: $('dev-panel'), devStatus: $('dev-status'), versionTag: $('version-tag')
 }
 
@@ -80,7 +82,8 @@ const state = {
   pinScale: 1,
   colored: getColored(),
   arcs: getArcs(),
-  selfName: ''
+  selfName: '',
+  precisionKm: 0
 }
 
 // --- globe -------------------------------------------------------------------
@@ -123,6 +126,7 @@ function showPinOverlay (data) {
     els.pinCoords.textContent = (typeof data.lat === 'number' && typeof data.lng === 'number')
       ? round(data.lat) + ', ' + round(data.lng)
       : '\u2014'
+    els.pinFingerprint.textContent = '\u2014'
   } else {
     const c = data.contact
     // The user's local nickname takes priority; the peer's self-chosen name is
@@ -134,6 +138,8 @@ function showPinOverlay (data) {
     els.pinCoords.textContent = (typeof data.lat === 'number' && typeof data.lng === 'number')
       ? round(data.lat) + ', ' + round(data.lng)
       : '\u2014'
+    els.pinFingerprint.textContent = fingerprint(c.publicKeyB64) || '\u2014'
+    els.pinFingerprint.title = 'Verify this over a second channel before sharing real location.'
   }
   els.pinOverlay.style.display = 'block'
   els.pinOverlay.style.left = '50%'
@@ -305,6 +311,14 @@ function renderContactsList () {
       coords.textContent = round(c.lat) + ', ' + round(c.lng)
       item.appendChild(coords)
     }
+    const fp = fingerprint(c.publicKeyB64)
+    if (fp) {
+      const fpEl = document.createElement('div')
+      fpEl.className = 'contact-fingerprint'
+      fpEl.textContent = fp
+      fpEl.title = 'Verify this over a second channel before sharing real location.'
+      item.appendChild(fpEl)
+    }
     // Tap the contact row to center the map/globe on them.
     item.addEventListener('click', () => {
       if (typeof c.lat === 'number' && typeof c.lng === 'number' && state.globe && typeof state.globe.centerOn === 'function') {
@@ -384,6 +398,21 @@ function initUI () {
     els.setMapStyle.appendChild(o)
   }
 
+  const PRECISION_OPTIONS = [
+    { km: 0, label: 'Off (exact)' },
+    { km: 5, label: '~5 km' },
+    { km: 10, label: '~10 km' },
+    { km: 25, label: '~25 km' },
+    { km: 50, label: '~50 km' }
+  ]
+  for (const p of PRECISION_OPTIONS) {
+    const o = document.createElement('option')
+    o.value = String(p.km)
+    o.textContent = p.label
+    if (p.km === state.precisionKm) o.selected = true
+    els.setPrecision.appendChild(o)
+  }
+
   $('btn-add-contact').addEventListener('click', () => openModal(els.modalAdd))
   $('btn-settings').addEventListener('click', () => {
     const { value: fv, unitId: fu } = freqSplit(state.intervalMs)
@@ -392,6 +421,7 @@ function initUI () {
     els.pinScale.value = String(state.pinScale)
     els.pinsizeVal.textContent = state.pinScale.toFixed(1) + '×'
     if (els.setSelfName) els.setSelfName.value = state.selfName
+    if (els.setPrecision) els.setPrecision.value = String(state.precisionKm)
     syncManualUI()
     openModal(els.modalSet)
   })
@@ -405,6 +435,10 @@ function initUI () {
   }
   if (els.btnScanQr) {
     els.btnScanQr.addEventListener('click', onScanQr)
+  }
+  if (els.addPub) {
+    els.addPub.addEventListener('input', updateAddFingerprint)
+    updateAddFingerprint()
   }
 
   // Minimize/expand the panels.
@@ -525,6 +559,20 @@ function readManualInputs () {
   return { lat, lng }
 }
 
+// Live safety-number preview under the Add Contact key field, so the user can
+// verify the fingerprint *before* saving the contact.
+function updateAddFingerprint () {
+  if (!els.addFingerprint) return
+  const key = (els.addPub.value || '').trim()
+  const fp = key ? fingerprint(key) : null
+  els.addFingerprint.textContent = fp
+    ? 'Fingerprint: ' + fp
+    : 'Paste or scan a key to see its fingerprint.'
+  els.addFingerprint.title = fp
+    ? 'Verify this over a second channel before sharing real location.'
+    : ''
+}
+
 async function onAddContact () {
   els.addErr.textContent = ''
   try {
@@ -532,6 +580,7 @@ async function onAddContact () {
     upsertContact(res.contact)
     closeModal(els.modalAdd)
     els.addNick.value = ''; els.addPub.value = ''
+    updateAddFingerprint()
     toast(`Added ${res.contact.nickname}`)
   } catch (err) {
     els.addErr.textContent = String(err.message || err)
@@ -548,6 +597,7 @@ async function onScanQr () {
       // Normalize: our keys are raw base64 (no scheme prefix); strip any
       // "ichnaea:" / "beacon:" prefix a future QR variant might carry.
       els.addPub.value = text.replace(/^(ichnaea|beacon|iot):/i, '').trim()
+      updateAddFingerprint()
       openModal(els.modalAdd)
       if (!els.addPub.value) {
         els.addErr.textContent = 'That QR didn\u2019t contain a public key'
@@ -608,6 +658,13 @@ async function onSaveSettings () {
     const res = await request('interval:set', { intervalMs: ms })
     state.intervalMs = res.intervalMs
     syncFreqDisplay()
+    if (els.setPrecision) {
+      const km = Number(els.setPrecision.value) || 0
+      if (km !== state.precisionKm) {
+        await request('precision:set', { precisionKm: km })
+        state.precisionKm = km
+      }
+    }
     closeModal(els.modalSet)
     toast('Settings saved')
     // Map style change needs a reload (the renderer is built once at boot).
@@ -722,6 +779,8 @@ async function onOpen () {
     state.manual = res.manual || { enabled: false, lat: null, lng: null }
     state.contacts = res.contacts || []
     state.selfName = res.selfName || ''
+    state.precisionKm = typeof res.precisionKm === 'number' ? res.precisionKm : 0
+    if (els.setPrecision) els.setPrecision.value = String(state.precisionKm)
     if (res.selfLoc) state.globe.setSelf(res.selfLoc)
     renderContactsList()
   } catch (err) {

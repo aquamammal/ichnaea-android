@@ -9,7 +9,8 @@ const DEFAULTS = {
   intervalMs: 86400000, // 1 day
   coreGeneration: 0,
   manual: { enabled: false, lat: null, lng: null },
-  selfName: '' // user's own name, shared with contacts in every check-in
+  selfName: '', // user's own name, shared with contacts in every check-in
+  precisionKm: 0 // coarse-location snap: 0 = off, else 5/10/25/50 km
 }
 
 async function settingsFile () {

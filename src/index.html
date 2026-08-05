@@ -92,6 +92,7 @@
       }
       .contact-top { display: flex; align-items: center; gap: 8px; width: 100%; }
       .contact-coords { font-size: 11px; color: var(--muted); padding: 2px 0 0 16px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+      .contact-fingerprint { font-size: 10px; color: var(--muted); padding: 2px 0 0 16px; font-family: ui-monospace, Menlo, Consolas, monospace; opacity: 0.75; }
       .contact-item + .contact-item { border-top: 1px solid rgba(255,255,255,0.05); }
       .contact-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .contact-item .ago { font-size: 11px; color: var(--muted); }
@@ -207,6 +208,7 @@
         <input id="add-nickname" placeholder="e.g. Alice" maxlength="40" />
         <label for="add-pubkey">Their Base64 public key</label>
         <input id="add-pubkey" placeholder="Paste public key" spellcheck="false" />
+        <div class="label" id="add-fingerprint" style="margin-top:6px;font-family:ui-monospace,Menlo,Consolas,monospace">Paste or scan a key to see its fingerprint.</div>
         <div class="row" style="gap:8px;margin-top:6px">
           <button id="btn-scan-qr" style="flex:1">Scan QR code</button>
         </div>
@@ -237,6 +239,10 @@
         <label for="set-mapstyle" style="margin-top:14px">Map style</label>
         <select id="set-mapstyle"></select>
         <div class="label" style="margin-top:8px">Wireframe globe, full-color globe, colored countries, or a flat map. Applies on save.</div>
+
+        <label for="set-precision" style="margin-top:14px">Location precision</label>
+        <select id="set-precision"></select>
+        <div class="label" style="margin-top:8px">Coarsen the coordinates you broadcast to a grid. Off shares your exact position.</div>
 
         <h3 style="margin-top:18px">Updates</h3>
         <div class="row" style="gap:8px">
@@ -288,6 +294,7 @@
       <div class="kv">Sent: <b id="pin-ago">—</b></div>
       <div class="kv">Status: <b id="pin-status">—</b></div>
       <div class="kv">Coords: <b id="pin-coords">—</b></div>
+      <div class="kv">Fingerprint: <b id="pin-fingerprint">—</b></div>
     </div>
 
     <!-- Hidden dev panel (double-tap version tag to open) -->
@@ -302,6 +309,6 @@
     <div id="toast"></div>
     <div id="version-tag">ichnaea-android v0.2.1</div>
 
-    <script type="module" src="./main.bundle.js?v=1785930253540"></script>
+    <script type="module" src="./main.bundle.js?v=1785935673521"></script>
   </body>
 </html>

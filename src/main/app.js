@@ -6,6 +6,7 @@ import * as contacts from './contacts.js'
 import { openLocalCore, appendCheckin, readLatest, replicateContactCore, MAX_ENTRIES } from './corelog.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { createMainScheduler } from './scheduler.js'
+import { snapCoords, PRECISION_KM_OPTIONS } from './precision.js'
 
 // Main-process P2P orchestrator. Owns the entire P2P stack (identity, local
 // Hypercore on the filesystem, Hyperswarm, contact-core replication, and the
@@ -208,10 +209,14 @@ export async function createMainApp ({ pipe }) {
 
   // Append a check-in to the local core, push to the renderer, rotate if needed.
   // The check-in carries the sender's self-chosen name so contacts can show it.
+  // When the coarse-location setting is on, coordinates are snapped to a grid
+  // first so contacts only see an approximate position (covers scheduled AND
+  // manual check-ins).
   async function doCheckin ({ lat, lng, timestamp }) {
     const name = (state.settings.selfName || '').trim()
-    const res = await appendCheckin(state.localCore, { lat, lng, timestamp, name }, state.identity.logKey)
-    send({ type: 'self', lat, lng, timestamp, name })
+    const snapped = snapCoords(lat, lng, state.settings.precisionKm || 0)
+    const res = await appendCheckin(state.localCore, { lat: snapped.lat, lng: snapped.lng, timestamp, name }, state.identity.logKey)
+    send({ type: 'self', lat: snapped.lat, lng: snapped.lng, timestamp, name })
     if (res.shouldRotate) await rotateCore()
     return res
   }
@@ -256,6 +261,7 @@ export async function createMainApp ({ pipe }) {
           publicKeyB64: pubToB64(state.identity.publicKey),
           intervalMs: state.settings.intervalMs,
           selfName: state.settings.selfName || '',
+          precisionKm: state.settings.precisionKm || 0,
           contacts: list.map(toRendererContact),
           selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null,
           manual: getManual()
@@ -307,6 +313,15 @@ export async function createMainApp ({ pipe }) {
         state.scheduler.setIntervalMs(ms)
         state.swarm.refreshHello() // tell contacts our new interval
         send({ type: 'interval:set', id: msg.id, intervalMs: ms })
+        return
+      }
+
+      if (msg.type === 'precision:set') {
+        const km = Number(msg.precisionKm)
+        if (PRECISION_KM_OPTIONS.indexOf(km) === -1) throw new Error('Pick a valid precision')
+        state.settings.precisionKm = km
+        await saveSettings(state.settings)
+        send({ type: 'precision:set', id: msg.id, precisionKm: km })
         return
       }
 
