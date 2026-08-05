@@ -131,18 +131,10 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   let pinScale = 1
   let refAlt = null // camera altitude at which pins have their base size
   let lastAlt = null
+  const GLOBE_RADIUS = 100 // matches three-globe's internal radius
+  const PX_PER_DEG = 2 * Math.PI * GLOBE_RADIUS / 360
 
   // Camera counter-scale: as the globe zooms, keep pins a constant screen size.
-  function applyCounterScale (k) {
-    try {
-      globe.scene().traverse((obj) => {
-        if (obj.__globeObjType === 'point' && obj.userData.baseScale) {
-          obj.scale.copy(obj.userData.baseScale).multiplyScalar(k)
-        }
-      })
-    } catch { /* non-fatal */ }
-  }
-
   function currentK () {
     try {
       const pov = globe.pointOfView()
@@ -152,22 +144,34 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
     } catch { return 1 }
   }
 
+  // Recompute each point mesh's world scale directly from its pin data (size =
+  // width, alt = height) times the camera counter-scale k. No cached base scale,
+  // so the slider and zoom never fight or leave stale scales.
+  function applyPinScales () {
+    const k = currentK()
+    try {
+      globe.scene().traverse((obj) => {
+        if (obj.__globeObjType === 'point' && obj.__data) {
+          const d = obj.__data
+          obj.scale.x = obj.scale.y = (d.size || 0.3) * PX_PER_DEG * k
+          obj.scale.z = Math.max((d.alt || 0.025) * GLOBE_RADIUS, 0.1) * k
+        }
+      })
+    } catch { /* non-fatal */ }
+  }
+
   function applyPointShapes () {
     try {
-      const k = currentK()
       const roots = [globe.scene()]
       if (typeof globe.globe === 'function' && globe.globe()) roots.push(globe.globe())
       for (const root of roots) {
         root.traverse((obj) => {
-          if (obj.__globeObjType === 'point') {
-            if (obj.geometry && obj.geometry !== teardropGeo) obj.geometry = teardropGeometry()
-            // Capture three-globe's base scale (set on pointsData), then apply the
-            // camera counter-scale so pins hold a constant screen size while zooming.
-            if (!obj.userData.baseScale) obj.userData.baseScale = obj.scale.clone()
-            obj.scale.copy(obj.userData.baseScale).multiplyScalar(k)
+          if (obj.__globeObjType === 'point' && obj.geometry && obj.geometry !== teardropGeo) {
+            obj.geometry = teardropGeometry()
           }
         })
       }
+      applyPinScales()
     } catch { /* non-fatal */ }
   }
 
@@ -180,6 +184,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
 
   function sync () {
     globe.pointsData([...pins.values()])
+    applyPinScales() // meshes exist after the synchronous digest — set scale now
     scheduleShapeSwap()
     syncArcs()
   }
@@ -212,8 +217,8 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function setSelf ({ lat, lng }) {
     selfLoc = { lat, lng }
     pins.set('self', {
-      id: 'self', lat, lng, alt: 0.03, color: COLOR_SELF, baseSize: 0.5,
-      size: 0.35 * pinScale, data: { self: true, lat, lng }
+      id: 'self', lat, lng, alt: 0.03 * pinScale, color: COLOR_SELF, baseSize: 0.5, baseAlt: 0.03,
+      size: 0.5 * pinScale, data: { self: true, lat, lng }
     })
     sync()
     centerOnSelf(lat, lng)
@@ -224,8 +229,8 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   function upsertContactPin (contact, loc, status) {
     const color = contactColor(contact.id, status === 'stale')
     pins.set(contact.id, {
-      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025, color, baseSize: 0.42,
-      size: 0.3 * pinScale, data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
+      id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025 * pinScale, color, baseSize: 0.42, baseAlt: 0.025,
+      size: 0.42 * pinScale, data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
     })
     sync()
   }
@@ -233,11 +238,10 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
   // Rescale every pin (0.2x..3x) and re-render.
   function setPinScale (scale) {
     pinScale = Math.max(0.2, Math.min(20, Number(scale) || 1))
-    for (const p of pins.values()) p.size = (p.baseSize || 0.3) * pinScale
-    // Force re-capture of base scales so the new size applies.
-    try {
-      globe.scene().traverse((obj) => { if (obj.__globeObjType === 'point') delete obj.userData.baseScale })
-    } catch { /* non-fatal */ }
+    for (const p of pins.values()) {
+      p.size = (p.baseSize || 0.3) * pinScale
+      p.alt = (p.baseAlt || 0.025) * pinScale
+    }
     sync()
   }
 
@@ -298,7 +302,7 @@ export function createGlobeRenderer (container, { onPinClick } = {}) {
       if (alt && alt !== lastAlt) {
         lastAlt = alt
         if (refAlt === null) refAlt = alt
-        else applyCounterScale(alt / refAlt)
+        else applyPinScales()
       }
     } catch { /* non-fatal */ }
     requestAnimationFrame(tick)

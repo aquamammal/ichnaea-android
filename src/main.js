@@ -11,6 +11,7 @@ const $ = (id) => document.getElementById(id)
 const els = {
   peerDot: $('peer-dot'), peerStatus: $('peer-status'), gpsStatus: $('gps-status'),
   myPubkey: $('my-pubkey'), contactsList: $('contacts-list'),
+  panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
   modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'),
   modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
@@ -275,6 +276,16 @@ function initUI () {
   $('add-confirm').addEventListener('click', onAddContact)
   $('set-confirm').addEventListener('click', onSaveSettings)
   $('btn-checkin-now').addEventListener('click', onCheckinNow)
+
+  // Minimize/expand the panels.
+  const toggleMin = (panel, btn) => {
+    const collapsed = panel.classList.toggle('collapsed')
+    btn.textContent = collapsed ? '+' : '–'
+    btn.title = collapsed ? 'Expand' : 'Minimize'
+  }
+  $('min-beacon').addEventListener('click', () => toggleMin(els.panelTopleft, $('min-beacon')))
+  $('min-contacts').addEventListener('click', () => toggleMin(els.panelContacts, $('min-contacts')))
+
 
   // Pin size slider (persisted in localStorage).
   els.pinScale.addEventListener('input', () => {

@@ -34,7 +34,13 @@
         z-index: 10;
       }
       #panel-topleft { top: 14px; left: 14px; width: 300px; }
-      #panel-contacts { bottom: 14px; right: 14px; width: 300px; max-height: 46vh; overflow-y: auto; }
+      #panel-contacts { bottom: 14px; right: 14px; width: 300px; max-height: 50vh; overflow-y: auto; }
+      .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+      .panel-head h2 { margin: 0; }
+      .min-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; width: 22px; height: 22px; line-height: 1; cursor: pointer; font-size: 14px; padding: 0; flex: none; }
+      .min-btn:hover { color: var(--text); }
+      .panel.collapsed .panel-body { display: none; }
+      .panel.collapsed .panel-head { margin-bottom: 0; }
 
       .panel h2 {
         margin: 0 0 10px 0;
@@ -145,7 +151,11 @@
 
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
-      <h2>Check-In Beacon</h2>
+      <div class="panel-head">
+        <h2>Check-In Beacon</h2>
+        <button class="min-btn" id="min-beacon" title="Minimize">–</button>
+      </div>
+      <div class="panel-body">
       <div class="row status-line"><span class="dot" id="peer-dot"></span><span id="peer-status">Connecting…</span></div>
       <div class="row status-line"><span id="gps-status">Location: idle</span></div>
       <div class="row">
@@ -162,12 +172,18 @@
       </div>
       <div class="label">Your public key (tap to copy — share this out-of-band):</div>
       <div class="pubkey" id="my-pubkey" title="Copy">…</div>
+      </div>
     </div>
 
     <!-- Bottom-right contacts list -->
     <div class="panel" id="panel-contacts">
-      <h2>Contacts</h2>
-      <div id="contacts-list"><div class="empty">No contacts yet. Add one to begin.</div></div>
+      <div class="panel-head">
+        <h2>Contacts</h2>
+        <button class="min-btn" id="min-contacts" title="Minimize">–</button>
+      </div>
+      <div class="panel-body">
+        <div id="contacts-list"><div class="empty">No contacts yet. Add one to begin.</div></div>
+      </div>
     </div>
 
     <!-- Add Contact modal -->
@@ -238,6 +254,6 @@
     <div id="toast"></div>
     <div id="version-tag">ichnaea-android v0.1.0</div>
 
-    <script type="module" src="./main.bundle.js?v=1785897336310"></script>
+    <script type="module" src="./main.bundle.js?v=1785902614287"></script>
   </body>
 </html>
