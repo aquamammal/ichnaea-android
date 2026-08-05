@@ -1,6 +1,6 @@
 import { classify, humanize, formatLocal, STATUS } from './staleness.js'
 import { createRenderer } from './renderer.js'
-import { MAP_STYLES, getMapStyleId, setMapStyleId, getColored, setColored } from './map-styles.js'
+import { MAP_STYLES, getMapStyleId, setMapStyleId, getColored, setColored, getArcs, setArcs } from './map-styles.js'
 import QRCode from 'qrcode/lib/browser.js'
 import { openScanner } from './scanner.js'
 import { checkForUpdates } from './updates.js'
@@ -17,9 +17,11 @@ const els = {
   myPubkey: $('my-pubkey'), contactsList: $('contacts-list'),
   btnQr: $('btn-qr'), modalQr: $('modal-qr'), qrCanvas: $('qr-canvas'), qrKey: $('qr-key'), qrClose: $('qr-close'),
   colorToggle: $('btn-color-countries'), colorVal: $('color-countries-val'),
+  arcsToggle: $('btn-arcs'), arcsVal: $('arcs-val'),
   panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
   modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'), btnScanQr: $('btn-scan-qr'),
-  modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
+  modalSet: $('modal-settings'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
+  setFreqMin: $('set-freq-min'), setFreqUnit: $('set-freq-unit'), freqDisplay: $('freq-display'),
   setSelfName: $('set-selfname'),
   btnCheckUpdates: $('btn-check-updates'), updatesStatus: $('updates-status'), updatesDetail: $('updates-detail'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
@@ -28,15 +30,36 @@ const els = {
   toast: $('toast'), devPanel: $('dev-panel'), devStatus: $('dev-status'), versionTag: $('version-tag')
 }
 
-const INTERVALS = [
-  { label: '1 Hour', ms: 3600000 },
-  { label: '6 Hours', ms: 21600000 },
-  { label: '12 Hours', ms: 43200000 },
-  { label: '1 Day', ms: 86400000 },
-  { label: '3 Days', ms: 259200000 },
-  { label: '1 Week', ms: 604800000 }
+// Broadcast frequency: user picks a number + unit (minutes / hours / days).
+const FREQ_UNITS = [
+  { id: 'minutes', ms: 60000, label: 'minutes' },
+  { id: 'hours', ms: 3600000, label: 'hours' },
+  { id: 'days', ms: 86400000, label: 'days' }
 ]
 const DEFAULT_INTERVAL_MS = 86400000
+
+// Split an interval (ms) into { value, unitId } for the dropdowns.
+function freqSplit (ms) {
+  ms = Number(ms) || DEFAULT_INTERVAL_MS
+  // Pick the largest unit that divides evenly and keeps value >= 1.
+  for (const u of [...FREQ_UNITS].reverse()) {
+    if (ms >= u.ms && ms % u.ms === 0) return { value: ms / u.ms, unitId: u.id }
+  }
+  return { value: Math.round(ms / 60000), unitId: 'minutes' }
+}
+
+// Rebuild the {value,unit} interval from the dropdowns (ms).
+function freqFromDropdowns () {
+  const v = parseInt(els.setFreqMin.value, 10)
+  const u = FREQ_UNITS.find((x) => x.id === els.setFreqUnit.value) || FREQ_UNITS[1]
+  return (isFinite(v) && v > 0 ? v : 1) * u.ms
+}
+
+function formatFreq (ms) {
+  const { value, unitId } = freqSplit(ms)
+  const label = FREQ_UNITS.find((u) => u.id === unitId).label
+  return `${value} ${label}`
+}
 const GPS_TIMEOUT_MS = 15000
 
 function toast (msg, ms = 2600) {
@@ -56,12 +79,13 @@ const state = {
   manual: { enabled: false, lat: null, lng: null },
   pinScale: 1,
   colored: getColored(),
+  arcs: getArcs(),
   selfName: ''
 }
 
 // --- globe -------------------------------------------------------------------
 function initGlobe () {
-  state.globe = createRenderer($('globe'), { onPinClick: showPinOverlay, colored: state.colored })
+  state.globe = createRenderer($('globe'), { onPinClick: showPinOverlay, colored: state.colored, showArcs: state.arcs })
 }
 
 function syncColorToggle () {
@@ -75,6 +99,19 @@ function onColorToggle () {
   syncColorToggle()
   if (state.globe && typeof state.globe.setColored === 'function') state.globe.setColored(state.colored)
   toast('Colored countries: ' + (state.colored ? 'on' : 'off'))
+}
+
+function syncArcsToggle () {
+  if (!els.arcsToggle || !els.arcsVal) return
+  els.arcsVal.textContent = state.arcs ? 'On' : 'Off'
+}
+
+function onArcsToggle () {
+  state.arcs = !state.arcs
+  setArcs(state.arcs)
+  syncArcsToggle()
+  if (state.globe && typeof state.globe.setArcs === 'function') state.globe.setArcs(state.arcs)
+  toast('Connecting lines: ' + (state.arcs ? 'on' : 'off'))
 }
 
 function showPinOverlay (data) {
@@ -321,13 +358,22 @@ async function onRemoveContact (c) {
 
 // --- UI wiring ---------------------------------------------------------------
 function initUI () {
-  for (const opt of INTERVALS) {
+  // Frequency dropdowns: minutes 1..59, hours 1..48, days 1..30.
+  for (let i = 1; i <= 59; i++) {
     const o = document.createElement('option')
-    o.value = String(opt.ms)
-    o.textContent = opt.label
-    els.setInterval.appendChild(o)
+    o.value = String(i)
+    o.textContent = String(i)
+    els.setFreqMin.appendChild(o)
   }
-  els.setInterval.value = String(state.intervalMs)
+  for (const u of FREQ_UNITS) {
+    const o = document.createElement('option')
+    o.value = u.id
+    o.textContent = u.label
+    els.setFreqUnit.appendChild(o)
+  }
+  const { value: fv, unitId: fu } = freqSplit(state.intervalMs)
+  els.setFreqMin.value = String(fv)
+  els.setFreqUnit.value = fu
 
   const currentStyle = getMapStyleId()
   for (const s of MAP_STYLES) {
@@ -340,7 +386,9 @@ function initUI () {
 
   $('btn-add-contact').addEventListener('click', () => openModal(els.modalAdd))
   $('btn-settings').addEventListener('click', () => {
-    els.setInterval.value = String(state.intervalMs)
+    const { value: fv, unitId: fu } = freqSplit(state.intervalMs)
+    els.setFreqMin.value = String(fv)
+    els.setFreqUnit.value = fu
     els.pinScale.value = String(state.pinScale)
     els.pinsizeVal.textContent = state.pinScale.toFixed(1) + '×'
     if (els.setSelfName) els.setSelfName.value = state.selfName
@@ -397,6 +445,10 @@ function initUI () {
   if (els.colorToggle) {
     els.colorToggle.addEventListener('click', onColorToggle)
     syncColorToggle()
+  }
+  if (els.arcsToggle) {
+    els.arcsToggle.addEventListener('click', onArcsToggle)
+    syncArcsToggle()
   }
   if (els.btnQr) {
     els.btnQr.addEventListener('click', openQrModal)
@@ -539,8 +591,12 @@ async function onCheckUpdates () {
   }
 }
 
+function syncFreqDisplay () {
+  if (els.freqDisplay) els.freqDisplay.textContent = 'Broadcast: every ' + formatFreq(state.intervalMs)
+}
+
 async function onSaveSettings () {
-  const ms = parseInt(els.setInterval.value, 10)
+  const ms = freqFromDropdowns()
   if (!ms || ms <= 0) { els.setErr.textContent = 'Pick a valid interval'; return }
   try {
     await saveManual()
@@ -551,6 +607,7 @@ async function onSaveSettings () {
     }
     const res = await request('interval:set', { intervalMs: ms })
     state.intervalMs = res.intervalMs
+    syncFreqDisplay()
     closeModal(els.modalSet)
     toast('Settings saved')
     // Map style change needs a reload (the renderer is built once at boot).
@@ -622,36 +679,66 @@ async function onForce200 () {
 }
 
 // --- boot --------------------------------------------------------------------
+let booted = false
+
 function connect () {
+  // Guard against double init: ws.onclose schedules another connect(), which
+  // would re-run initGlobe() + initUI() (duplicate globes, duplicate options,
+  // and re-attached listeners racing with the first pass) and break panel
+  // minimize. Only the first boot initializes the renderer and UI; reconnects
+  // just open a fresh WebSocket.
+  if (booted) {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
+    ws = new WebSocket(WS_URL)
+    ws.onopen = onOpen
+    ws.onmessage = onMessage
+    ws.onclose = onClose
+    ws.onerror = () => {}
+    return
+  }
+  booted = true
+
   initGlobe()
   initUI()
   startStalenessSweep()
 
   ws = new WebSocket(WS_URL)
-  ws.onopen = async () => {
-    setGpsStatus('connected \u00b7 awaiting first check-in')
-    try {
-      const res = await request('boot')
-      els.myPubkey.textContent = res.publicKeyB64
-      state.intervalMs = res.intervalMs || DEFAULT_INTERVAL_MS
-      els.setInterval.value = String(state.intervalMs)
-      state.manual = res.manual || { enabled: false, lat: null, lng: null }
-      state.contacts = res.contacts || []
-      state.selfName = res.selfName || ''
-      if (res.selfLoc) state.globe.setSelf(res.selfLoc)
-      renderContactsList()
-    } catch (err) {
-      setGpsStatus('no connection to main process')
-      console.error('boot error:', err)
-    }
-  }
-  ws.onmessage = (ev) => {
-    let msg
-    try { msg = JSON.parse(ev.data) } catch { return }
-    handlePush(msg)
-  }
-  ws.onclose = () => { setGpsStatus('connection closed \u00b7 reconnecting\u2026'); setTimeout(connect, 2000) }
+  ws.onopen = onOpen
+  ws.onmessage = onMessage
+  ws.onclose = onClose
   ws.onerror = () => {}
+}
+
+async function onOpen () {
+  setGpsStatus('connected \u00b7 awaiting first check-in')
+  try {
+    const res = await request('boot')
+    els.myPubkey.textContent = res.publicKeyB64
+    state.intervalMs = res.intervalMs || DEFAULT_INTERVAL_MS
+    const { value: fv, unitId: fu } = freqSplit(state.intervalMs)
+    els.setFreqMin.value = String(fv)
+    els.setFreqUnit.value = fu
+    syncFreqDisplay()
+    state.manual = res.manual || { enabled: false, lat: null, lng: null }
+    state.contacts = res.contacts || []
+    state.selfName = res.selfName || ''
+    if (res.selfLoc) state.globe.setSelf(res.selfLoc)
+    renderContactsList()
+  } catch (err) {
+    setGpsStatus('no connection to main process')
+    console.error('boot error:', err)
+  }
+}
+
+function onMessage (ev) {
+  let msg
+  try { msg = JSON.parse(ev.data) } catch { return }
+  handlePush(msg)
+}
+
+function onClose () {
+  setGpsStatus('connection closed \u00b7 reconnecting\u2026')
+  setTimeout(connect, 2000)
 }
 
 // --- start -------------------------------------------------------------------

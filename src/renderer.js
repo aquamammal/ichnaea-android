@@ -5,7 +5,7 @@
 //
 // Both renderers expose the same public interface:
 //   { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale,
-//     setGrayscale, setColored, centerOn, resize, globe, webgl }
+//     setGrayscale, setColored, setArcs, centerOn, resize, globe, webgl }
 // so callers (src/main.js) never need to know which one they got.
 //
 // If a globe style is selected but WebGL is unavailable, we transparently fall

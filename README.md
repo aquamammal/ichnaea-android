@@ -104,6 +104,10 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists (with a tap-to-download link). It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry).
 
+**Connecting-lines toggle** — a "Connecting lines" On/Off button on the beacon tile shows/hides the dotted arcs from your pin to each contact. Works on every map style and the 3D globe; persisted.
+
+**Broadcast frequency, your way** — the beacon header reads **Ichnaea Ver. X.Y.Z**, the tile shows your current frequency ("Broadcast: every 6 hours"), and **Settings → Broadcast frequency** is a free choice of **minutes / hours / days** rather than a fixed list. The main button is **Broadcast coordinates**.
+
 All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 
 ## Native addon fixes (important for rebuilds)
@@ -127,7 +131,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.1-debug.apk
-- SHA-256: `cd514cb8ae07b59de87a3aa10fe0807613709b28855ce6421fea0617687f3dc6`
+- SHA-256: `f43c21123b9b7f299c673f8ad0565b7d1df94e8480bc9b6d032ad65499ff9e23`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.

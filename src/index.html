@@ -116,6 +116,7 @@
         width: 100%; background: rgba(0,0,0,0.35); color: var(--text);
         border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px;
       }
+      .modal select.freq-num { width: 90px; flex: none; }
       .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
       .form-error { color: var(--danger); font-size: 12px; min-height: 16px; margin-top: 8px; }
 
@@ -152,18 +153,19 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2>Check-In Beacon</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.2.1</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
       <div class="row status-line"><span class="dot" id="peer-dot"></span><span id="peer-status">Connecting…</span></div>
       <div class="row status-line"><span id="gps-status">Location: idle</span></div>
+      <div class="row status-line"><span id="freq-display" class="label" style="font-size:11px;color:var(--muted)">Broadcast: every 1 day</span></div>
       <div class="row">
         <button class="primary" id="btn-add-contact">Add Contact</button>
         <button id="btn-settings">Settings</button>
       </div>
       <div class="row">
-        <button id="btn-checkin-now">Check in now</button>
+        <button id="btn-checkin-now">Broadcast coordinates</button>
       </div>
       <div class="row" style="gap:8px;margin-top:4px">
         <span class="label" style="flex:none">Pin size</span>
@@ -173,6 +175,10 @@
       <div class="row" style="gap:8px;margin-top:4px">
         <button id="btn-color-countries" title="Fill countries with distinct colors on the map and globe">Colored countries</button>
         <span id="color-countries-val" class="label" style="flex:none;min-width:34px">Off</span>
+      </div>
+      <div class="row" style="gap:8px;margin-top:4px">
+        <button id="btn-arcs" title="Show/hide the dotted lines from your pin to each contact">Connecting lines</button>
+        <span id="arcs-val" class="label" style="flex:none;min-width:34px">On</span>
       </div>
       <div class="label">Your public key (tap to copy — share this out-of-band):</div>
       <div class="row" style="gap:8px">
@@ -216,9 +222,13 @@
     <div class="modal-backdrop" id="modal-settings">
       <div class="modal">
         <h3>Settings</h3>
-        <label for="set-interval">Broadcast frequency</label>
-        <select id="set-interval"></select>
-        <div class="label" style="margin-top:8px">Lower frequency saves battery. Default is 1 day.</div>
+        <label>Broadcast frequency</label>
+        <div class="row" style="gap:8px;align-items:center">
+          <span class="label">Every</span>
+          <select id="set-freq-min" class="freq-num" aria-label="minutes"></select>
+          <select id="set-freq-unit" aria-label="unit"></select>
+        </div>
+        <div class="label" style="margin-top:8px">Your choice of minutes, hours, or days. Lower frequency saves battery.</div>
 
         <label for="set-selfname" style="margin-top:14px">Your name</label>
         <input id="set-selfname" maxlength="40" placeholder="What contacts will see" spellcheck="false" />
@@ -292,6 +302,6 @@
     <div id="toast"></div>
     <div id="version-tag">ichnaea-android v0.2.1</div>
 
-    <script type="module" src="./main.bundle.js?v=1785918948945"></script>
+    <script type="module" src="./main.bundle.js?v=1785930253540"></script>
   </body>
 </html>

@@ -84,7 +84,7 @@ const countryCapColor = (d) => {
   return COUNTRY_FILLS[typeof i === 'number' ? i : 0]
 }
 
-export function createGlobeRenderer (container, { onPinClick, style, colored } = {}) {
+export function createGlobeRenderer (container, { onPinClick, style, colored, showArcs = true } = {}) {
   // 3D globe only. Map styles and WebGL unavailability are handled by the
   // dispatcher / fallback in the caller.
   if (!webglAvailable()) throw new Error('webgl-unavailable')
@@ -93,6 +93,7 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
   const isCountries = style === 'globe-countries'
   const isWireframe = !isTexture && !isCountries
   let coloredMode = Boolean(colored)
+  let arcsOn = Boolean(showArcs)
 
   let globe
   try {
@@ -249,7 +250,7 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
   }
 
   function syncArcs () {
-    if (!selfLoc || !isFinite(selfLoc.lat) || !isFinite(selfLoc.lng)) { globe.arcsData([]); return }
+    if (!arcsOn || !selfLoc || !isFinite(selfLoc.lat) || !isFinite(selfLoc.lng)) { globe.arcsData([]); return }
     const arcs = []
     for (const p of pins.values()) {
       if (p.id === 'self') continue
@@ -383,5 +384,11 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
     applySurface(coloredMode)
   }
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, centerOn, resize, globe, webgl: true }
+  // Live toggle for the dotted connecting lines (arcs).
+  function setArcs (on) {
+    arcsOn = Boolean(on)
+    syncArcs()
+  }
+
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, setArcs, centerOn, resize, globe, webgl: true }
 }

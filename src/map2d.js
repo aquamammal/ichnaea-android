@@ -58,9 +58,10 @@ function makeProjection (styleId, width, height, center) {
   return proj.fitSize([width, height], sphere)
 }
 
-export function create2DRenderer (container, { onPinClick, style, colored } = {}) {
+export function create2DRenderer (container, { onPinClick, style, colored, showArcs = true } = {}) {
   const styleId = style || 'map'
   let coloredMode = Boolean(colored)
+  let arcsOn = Boolean(showArcs)
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;'
   container.style.position = 'relative'
@@ -224,7 +225,7 @@ export function create2DRenderer (container, { onPinClick, style, colored } = {}
     else drawBaseShapesLive()
 
     // Dotted arcs from self to each contact (straight lines in this projection).
-    if (selfLoc) {
+    if (arcsOn && selfLoc) {
       const a = project(selfLoc.lat, selfLoc.lng)
       if (a) {
         ctx.setLineDash([4, 5])
@@ -461,6 +462,12 @@ export function create2DRenderer (container, { onPinClick, style, colored } = {}
     draw()
   }
 
+  // Live toggle for the dotted connecting lines (arcs).
+  function setArcs (on) {
+    arcsOn = Boolean(on)
+    draw()
+  }
+
   // Center the map on a location (used when a contact pin is clicked). Pans so
   // the point sits at the viewport center, preserving the current zoom.
   function centerOn (lat, lng) {
@@ -475,5 +482,5 @@ export function create2DRenderer (container, { onPinClick, style, colored } = {}
     draw()
   }
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, centerOn, resize, globe: null, webgl: false }
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, setArcs, centerOn, resize, globe: null, webgl: false }
 }

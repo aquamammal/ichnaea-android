@@ -76,3 +76,21 @@ export function setColored (on) {
     window.localStorage.setItem(COLORED_KEY, on ? '1' : '0')
   } catch { /* ignore */ }
 }
+
+// "Connecting lines" toggle (independent of the map style): show/hide the
+// dotted arcs from your pin to each contact. Persisted separately.
+const ARCS_KEY = 'showArcs'
+
+export function getArcs () {
+  try {
+    const v = (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem(ARCS_KEY))
+    return v === null ? true : (v === '1' || v === 'true')
+  } catch { /* ignore */ }
+  return true
+}
+
+export function setArcs (on) {
+  try {
+    window.localStorage.setItem(ARCS_KEY, on ? '1' : '0')
+  } catch { /* ignore */ }
+}
