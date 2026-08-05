@@ -19,6 +19,7 @@ const els = {
   panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
   modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'), btnScanQr: $('btn-scan-qr'),
   modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
+  setSelfName: $('set-selfname'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
   pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'),
@@ -52,7 +53,8 @@ const state = {
   contacts: [],
   manual: { enabled: false, lat: null, lng: null },
   pinScale: 1,
-  colored: getColored()
+  colored: getColored(),
+  selfName: ''
 }
 
 // --- globe -------------------------------------------------------------------
@@ -84,6 +86,8 @@ function showPinOverlay (data) {
       : '\u2014'
   } else {
     const c = data.contact
+    // The user's local nickname takes priority; the peer's self-chosen name is
+    // shown as a hint when they differ.
     els.pinName.textContent = c.nickname || 'Contact'
     els.pinTime.textContent = formatLocal(c.lastSeenTs)
     els.pinAgo.textContent = humanize(c.lastSeenTs)
@@ -96,6 +100,11 @@ function showPinOverlay (data) {
   els.pinOverlay.style.left = '50%'
   els.pinOverlay.style.top = '18%'
   els.pinOverlay.style.transform = 'translateX(-50%)'
+
+  // Center the map/globe on the clicked pin.
+  if (state.globe && typeof state.globe.centerOn === 'function' && typeof data.lat === 'number' && typeof data.lng === 'number') {
+    state.globe.centerOn(data.lat, data.lng)
+  }
 }
 $('pin-close').addEventListener('click', () => { els.pinOverlay.style.display = 'none' })
 
@@ -207,8 +216,8 @@ function startStalenessSweep () {
       const status = classify(c.lastSeenTs, c.intervalMs)
       if (status === STATUS.OFFLINE && state.globe.hasPin(c.id)) {
         state.globe.removeContactPin(c.id)
-      } else if (status === STATUS.STALE && state.globe.hasPin(c.id)) {
-        state.globe.upsertContactPin(c, pinCoords(c.id), 'stale')
+      } else if (status === STATUS.STALE && state.globe.hasPin(c.id) && typeof c.lat === 'number' && typeof c.lng === 'number') {
+        state.globe.upsertContactPin(c, { lat: c.lat, lng: c.lng }, 'stale')
       }
     }
     renderContactsList()
@@ -236,7 +245,9 @@ function renderContactsList () {
     dot.className = 'dot' + (status === STATUS.ACTIVE ? ' on' : '')
     const name = document.createElement('span')
     name.className = 'name'
-    name.textContent = c.nickname
+    // Local nickname takes priority; the peer's self-chosen name is a hint.
+    name.textContent = c.nickname || c.lastName || 'Unnamed'
+    name.title = c.lastName && c.lastName !== c.nickname ? ('Them: ' + c.lastName) : ''
     const ago = document.createElement('span')
     ago.className = 'ago'
     ago.textContent = c.lastSeenTs ? humanize(c.lastSeenTs) : 'never'
@@ -244,7 +255,7 @@ function renderContactsList () {
     rm.className = 'rm'
     rm.textContent = '\u00d7'
     rm.title = 'Remove contact'
-    rm.addEventListener('click', () => onRemoveContact(c))
+    rm.addEventListener('click', (e) => { e.stopPropagation(); onRemoveContact(c) })
     const top = document.createElement('div')
     top.className = 'contact-top'
     top.append(dot, name, ago, rm)
@@ -255,7 +266,41 @@ function renderContactsList () {
       coords.textContent = round(c.lat) + ', ' + round(c.lng)
       item.appendChild(coords)
     }
+    // Tap the contact row to center the map/globe on them.
+    item.addEventListener('click', () => {
+      if (typeof c.lat === 'number' && typeof c.lng === 'number' && state.globe && typeof state.globe.centerOn === 'function') {
+        state.globe.centerOn(c.lat, c.lng)
+        showPinOverlay({ self: false, contact: c, lat: c.lat, lng: c.lng, status })
+      }
+    })
+    // Long-press (touch) to rename.
+    if ('ontouchstart' in window) {
+      let longPress = null
+      item.addEventListener('touchstart', (e) => {
+        longPress = setTimeout(() => { longPress = null; onRenameContact(c) }, 550)
+      }, { passive: true })
+      item.addEventListener('touchend', () => { if (longPress) clearTimeout(longPress) })
+      item.addEventListener('touchmove', () => { if (longPress) clearTimeout(longPress) }, { passive: true })
+    } else {
+      // Desktop fallback: right-click to rename.
+      item.addEventListener('contextmenu', (e) => { e.preventDefault(); onRenameContact(c) })
+    }
     list.appendChild(item)
+  }
+}
+
+async function onRenameContact (c) {
+  const current = c.nickname || c.lastName || ''
+  const next = prompt('Rename this contact (local only):', current)
+  if (next === null) return // cancelled
+  const name = String(next || '').trim()
+  if (!name) return
+  try {
+    const res = await request('contact:rename', { contactId: c.id, nickname: name })
+    upsertContact(res.contact)
+    toast('Contact renamed')
+  } catch (err) {
+    toast('Rename failed: ' + String(err.message || err))
   }
 }
 
@@ -296,6 +341,7 @@ function initUI () {
     els.setInterval.value = String(state.intervalMs)
     els.pinScale.value = String(state.pinScale)
     els.pinsizeVal.textContent = state.pinScale.toFixed(1) + '×'
+    if (els.setSelfName) els.setSelfName.value = state.selfName
     syncManualUI()
     openModal(els.modalSet)
   })
@@ -463,6 +509,11 @@ async function onSaveSettings () {
   if (!ms || ms <= 0) { els.setErr.textContent = 'Pick a valid interval'; return }
   try {
     await saveManual()
+    if (els.setSelfName) {
+      const name = String(els.setSelfName.value || '').trim().slice(0, 40)
+      const res = await request('selfname:set', { name })
+      state.selfName = res.name
+    }
     const res = await request('interval:set', { intervalMs: ms })
     state.intervalMs = res.intervalMs
     closeModal(els.modalSet)
@@ -551,6 +602,7 @@ function connect () {
       els.setInterval.value = String(state.intervalMs)
       state.manual = res.manual || { enabled: false, lat: null, lng: null }
       state.contacts = res.contacts || []
+      state.selfName = res.selfName || ''
       if (res.selfLoc) state.globe.setSelf(res.selfLoc)
       renderContactsList()
     } catch (err) {

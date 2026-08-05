@@ -8,7 +8,8 @@ import { dataDir, readJson, writeJson, resolveFs } from './fsx.js'
 const DEFAULTS = {
   intervalMs: 86400000, // 1 day
   coreGeneration: 0,
-  manual: { enabled: false, lat: null, lng: null }
+  manual: { enabled: false, lat: null, lng: null },
+  selfName: '' // user's own name, shared with contacts in every check-in
 }
 
 async function settingsFile () {

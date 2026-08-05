@@ -97,6 +97,12 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **QR code scanning** — **Add Contact** has a **Scan QR code** button that opens the camera (back-facing), decodes the friend's QR on-device with the bundled `jsqr` lib (zero telemetry), and fills the public-key field automatically. Requires the **Camera** permission (declared in the manifest; Android prompts on first use).
 
+**Rename contacts** — long-press a contact in the list to rename them. Local-only (never sent to the peer); their check-ins never overwrite your nickname.
+
+**Name yourself** — **Settings → Your name** is sent with every check-in, so contacts see who you are. They can still rename you locally; your name appears under whatever nickname they chose.
+
+**Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
+
 All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 
 ## Native addon fixes (important for rebuilds)
@@ -119,8 +125,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.0-debug.apk
-- SHA-256: `d8b1090a1d21b4af5cbf6bdcae1a373a3bee16ef50a08dd3d2cbd49012a4081b`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.1-debug.apk
+- SHA-256: `6a729c20c4adfd45acf8a52826553db8db043f2444448ca6b6372452428905fc`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -129,8 +135,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.0-debug.apk
-> sha256sum dist/ichnaea-android-v0.2.0-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.1-debug.apk
+> sha256sum dist/ichnaea-android-v0.2.1-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was

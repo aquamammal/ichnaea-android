@@ -406,7 +406,8 @@ export function create2DRenderer (container, { onPinClick, style, colored } = {}
   // contact: { id, nickname, lastSeenTs, intervalMs }
   // loc: { lat, lng }  status: 'active' | 'stale'
   function upsertContactPin (contact, loc, status) {
-    const color = contactColor(contact.id, status === 'stale')
+    if (!loc || !isFinite(loc.lat) || !isFinite(loc.lng)) return // no coords yet
+    const color = String(contactColor(contact.id, status === 'stale'))
     pins.set(contact.id, {
       id: contact.id, lat: loc.lat, lng: loc.lng, color,
       data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
@@ -460,5 +461,19 @@ export function create2DRenderer (container, { onPinClick, style, colored } = {}
     draw()
   }
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, resize, globe: null, webgl: false }
+  // Center the map on a location (used when a contact pin is clicked). Pans so
+  // the point sits at the viewport center, preserving the current zoom.
+  function centerOn (lat, lng) {
+    const pt = project(lat, lng)
+    if (!pt) return
+    const { w, h } = dims()
+    const dx = (w / 2) - pt.x
+    const dy = (h / 2) - pt.y
+    panX += dx
+    panY += dy
+    applyView()
+    draw()
+  }
+
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, centerOn, resize, globe: null, webgl: false }
 }

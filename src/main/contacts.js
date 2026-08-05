@@ -113,3 +113,15 @@ export async function setContactCoreKey (id, coreKeyHex) {
 export async function setContactLogKey (id, logKeyHex) {
   return patch(id, { logKeyHex })
 }
+
+// Rename a contact (local-only nickname — never sent to the peer).
+export async function renameContact (id, nickname) {
+  const name = String(nickname || '').trim()
+  if (!name) throw new Error('Nickname cannot be empty')
+  return patch(id, { nickname: name })
+}
+
+// Remember the name the peer sent with their latest check-in ("self name").
+export async function setContactLastName (id, name) {
+  return patch(id, { lastName: String(name || '').slice(0, 40) })
+}

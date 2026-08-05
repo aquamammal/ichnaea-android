@@ -28,8 +28,9 @@ export async function openLocalCore (keyPair, generation = 0) {
 
 // Append a check-in. Never appends null/invalid locations. The block is
 // encrypted with the caller's symmetric `logKey` before appending.
+// `name` is the sender's self-chosen display name (empty when unset).
 // Returns { entry, length, shouldRotate }.
-export async function appendCheckin (core, { lat, lng, timestamp }, logKey) {
+export async function appendCheckin (core, { lat, lng, timestamp, name }, logKey) {
   if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
     throw new Error('Invalid coordinates — refusing to append')
   }
@@ -37,6 +38,7 @@ export async function appendCheckin (core, { lat, lng, timestamp }, logKey) {
     throw new Error('Coordinates out of range')
   }
   const entry = { lat, lng, timestamp: timestamp || Date.now() }
+  if (name) entry.name = String(name).slice(0, 40)
   const payload = b4a.from(JSON.stringify(entry))
   await core.append(encrypt(payload, logKey))
   return { entry, length: core.length, shouldRotate: core.length > MAX_ENTRIES }

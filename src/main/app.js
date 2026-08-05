@@ -184,9 +184,13 @@ export async function createMainApp ({ pipe }) {
     state.contactCores.delete(contactId)
   }
 
-  async function onContactCheckin (contactId, { lat, lng, timestamp }) {
+  async function onContactCheckin (contactId, { lat, lng, timestamp, name }) {
     const contact = await contacts.updateLastSeen(contactId, timestamp)
-    if (contact) send({ type: 'contact:update', contact: { ...toRendererContact(contact), lat, lng } })
+    // Remember the name the peer chose for themselves (shown as a hint unless
+    // the user renamed them locally).
+    if (name) await contacts.setContactLastName(contactId, name)
+    const updated = await contacts.getContact(contactId)
+    if (updated) send({ type: 'contact:update', contact: { ...toRendererContact(updated), lat, lng } })
   }
 
   // --- scheduler ---------------------------------------------------------------
@@ -203,9 +207,11 @@ export async function createMainApp ({ pipe }) {
   }
 
   // Append a check-in to the local core, push to the renderer, rotate if needed.
+  // The check-in carries the sender's self-chosen name so contacts can show it.
   async function doCheckin ({ lat, lng, timestamp }) {
-    const res = await appendCheckin(state.localCore, { lat, lng, timestamp }, state.identity.logKey)
-    send({ type: 'self', lat, lng, timestamp })
+    const name = (state.settings.selfName || '').trim()
+    const res = await appendCheckin(state.localCore, { lat, lng, timestamp, name }, state.identity.logKey)
+    send({ type: 'self', lat, lng, timestamp, name })
     if (res.shouldRotate) await rotateCore()
     return res
   }
@@ -249,6 +255,7 @@ export async function createMainApp ({ pipe }) {
           id: msg.id,
           publicKeyB64: pubToB64(state.identity.publicKey),
           intervalMs: state.settings.intervalMs,
+          selfName: state.settings.selfName || '',
           contacts: list.map(toRendererContact),
           selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null,
           manual: getManual()
@@ -271,6 +278,24 @@ export async function createMainApp ({ pipe }) {
         await state.swarm.leaveContact(msg.contactId)
         await contacts.removeContact(msg.contactId)
         send({ type: 'contact:removed', id: msg.id, contactId: msg.contactId })
+        return
+      }
+
+      if (msg.type === 'contact:rename') {
+        const contact = await contacts.renameContact(msg.contactId, msg.nickname)
+        if (contact) {
+          send({ type: 'contact:renamed', id: msg.id, contact: toRendererContact(contact) })
+        } else {
+          throw new Error('Contact not found')
+        }
+        return
+      }
+
+      if (msg.type === 'selfname:set') {
+        const name = String(msg.name || '').trim().slice(0, 40)
+        state.settings.selfName = name
+        await saveSettings(state.settings)
+        send({ type: 'selfname:set', id: msg.id, name })
         return
       }
 

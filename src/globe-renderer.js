@@ -249,24 +249,29 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
   }
 
   function syncArcs () {
-    if (!selfLoc) { globe.arcsData([]); return }
+    if (!selfLoc || !isFinite(selfLoc.lat) || !isFinite(selfLoc.lng)) { globe.arcsData([]); return }
     const arcs = []
     for (const p of pins.values()) {
       if (p.id === 'self') continue
+      // Guard against contacts without coords (e.g. a STALE sweep on a contact
+      // that never checked in): an undefined endLat/endLng can break three-globe's
+      // arc color interpolation and throw "str.trim is not a function".
+      if (!isFinite(p.lat) || !isFinite(p.lng)) continue
+      const c = String(p.color || COLOR_STALE)
       arcs.push({
         startLat: selfLoc.lat,
         startLng: selfLoc.lng,
         endLat: p.lat,
         endLng: p.lng,
-        color: [[COLOR_SELF, p.color], [COLOR_SELF, p.color]]
+        color: [[COLOR_SELF, c], [COLOR_SELF, c]]
       })
     }
     globe.arcsData(arcs)
   }
 
-  // Bring the globe's camera around to the self pin so it's actually visible
-  // (the default view faces the Atlantic). Smooth transition so it doesn't jump.
-  function centerOnSelf (lat, lng) {
+  // Bring the globe's camera around to a location so it's visible. Smooth
+  // transition so it doesn't jump. Used to center on a clicked contact.
+  function centerOn (lat, lng) {
     try {
       const pov = globe.pointOfView()
       globe.pointOfView({ lat, lng, altitude: (pov && pov.altitude) || 2.5 }, 1200)
@@ -280,13 +285,14 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
       size: 0.5 * pinScale, data: { self: true, lat, lng }
     })
     sync()
-    centerOnSelf(lat, lng)
+    centerOn(lat, lng)
   }
 
   // contact: { id, nickname, lastSeenTs, intervalMs }
   // loc: { lat, lng }  status: 'active' | 'stale'
   function upsertContactPin (contact, loc, status) {
-    const color = contactColor(contact.id, status === 'stale')
+    if (!loc || !isFinite(loc.lat) || !isFinite(loc.lng)) return // no coords yet
+    const color = String(contactColor(contact.id, status === 'stale'))
     pins.set(contact.id, {
       id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025 * pinScale, color, baseSize: 0.42, baseAlt: 0.025,
       size: 0.42 * pinScale, data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
@@ -374,5 +380,5 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
     applySurface(coloredMode)
   }
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, resize, globe, webgl: true }
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, centerOn, resize, globe, webgl: true }
 }
