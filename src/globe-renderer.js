@@ -263,7 +263,10 @@ export function createGlobeRenderer (container, { onPinClick, style, colored } =
         startLng: selfLoc.lng,
         endLat: p.lat,
         endLng: p.lng,
-        color: [[COLOR_SELF, c], [COLOR_SELF, c]]
+        // Flat color gradient (three-globe interpolates between the two stops).
+        // A nested [[a,b],[a,b]] makes d3 return an array and color2ShaderArr
+        // crashes with "str.trim is not a function".
+        color: [COLOR_SELF, c]
       })
     }
     globe.arcsData(arcs)
