@@ -41,11 +41,12 @@ export function createSwarmManager ({
   onPeerVerified, // (contactId, conn, meta) => void
   onPeerLeft, // (contactId) => void
   onLogKey, // (contactId, logKeyBuffer) => void
-  onUpdate // (state) => void  — peer/connection counts
+  onUpdate, // (state) => void  — peer/connection counts
+  bootstrap, // optional DHT bootstrap node list (default when omitted)
+  onFirstConnection // optional timing hook: (msSinceBoot, contactId) => void
 }) {
-  const swarm = new Hyperswarm()
-  const discoveries = new Map() // contactId -> { discovery, topicHex, publicKeyB64 }
-  const byPubKey = new Map() // publicKeyB64 -> contactId
+  const swarm = new Hyperswarm(bootstrap && bootstrap.length ? { bootstrap } : undefined)
+  const discoveries = new Map() // contactId -> { discovery, topicHex, publicKeyB64 }  const byPubKey = new Map() // publicKeyB64 -> contactId
   const conns = new Map() // contactId -> verified conn
   const connToContact = new Map() // conn -> contactId (verified)
   const connToEncPub = new Map() // conn -> peer's X25519 enc public key (base64)
@@ -54,6 +55,7 @@ export function createSwarmManager ({
   const servedCores = new Map() // protomux -> local core already served on it
 
   const state = { peers: 0, connections: 0, connecting: 0, verified: 0 }
+  const bootTs = Date.now() // for first-connection latency profiling (#5)
 
   function emit () {
     state.peers = swarm.peers ? swarm.peers.size : 0
@@ -185,6 +187,9 @@ export function createSwarmManager ({
         encPubKey: msg.encPubKey || null
       })
     }
+    if (firstTime && onFirstConnection) {
+      onFirstConnection(Date.now() - bootTs, contactId)
+    }
   }
 
   function handleLogKeyFrame (conn, msg) {
@@ -253,5 +258,4 @@ export function createSwarmManager ({
     await swarm.destroy()
   }
 
-  return { joinContact, leaveContact, getConn, refreshHello, refreshLocalCore, refreshLogKey, close, state: () => ({ ...state }), swarm }
-}
+  return { joinContact, leaveContact, getConn, refreshHello, refreshLocalCore, refreshLogKey, close, state: () => ({ ...state }), swarm }}

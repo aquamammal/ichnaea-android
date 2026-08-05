@@ -5,6 +5,7 @@ import QRCode from 'qrcode/lib/browser.js'
 import { openScanner } from './scanner.js'
 import { checkForUpdates } from './updates.js'
 import { fingerprint } from './fingerprint.js'
+import { createBackoff } from './backoff.js'
 
 // Renderer for Ichnaea Android. This is a THIN PIPE CLIENT: it owns only the
 // globe, the UI, and geolocation. ALL P2P state (identity, contacts, the local
@@ -209,7 +210,7 @@ function handlePush (msg) {
       els.peerDot.classList.toggle('on', msg.verified > 0)
       els.peerStatus.textContent = msg.verified > 0
         ? `${msg.verified} contact${msg.verified === 1 ? '' : 's'} connected`
-        : (state.contacts.length ? 'Waiting for contacts\u2026' : 'No contacts yet')
+        : (msg.connecting > 0 ? 'Connecting to contacts\u2026' : (state.contacts.length ? 'Waiting for contacts\u2026' : 'No contacts yet'))
       break
     }
     case 'contact:update': {
@@ -859,6 +860,11 @@ async function onRotateLogKey () {
 // --- boot --------------------------------------------------------------------
 let booted = false
 
+// Exponential-backoff reconnect: a down main process is retried progressively
+// (2s → 4s → 8s → … capped at 30s) instead of hammering at a fixed 2s, and the
+// attempt count resets on a successful connection.
+const reconnect = createBackoff({ base: 2000, max: 30000 })
+
 function connect () {
   // Guard against double init: ws.onclose schedules another connect(), which
   // would re-run initGlobe() + initUI() (duplicate globes, duplicate options,
@@ -891,6 +897,7 @@ async function onOpen () {
   setGpsStatus('connected \u00b7 awaiting first check-in')
   try {
     await loadState()
+    reconnect.reset()
   } catch (err) {
     setGpsStatus('no connection to main process')
     console.error('boot error:', err)
@@ -935,7 +942,7 @@ function onMessage (ev) {
 
 function onClose () {
   setGpsStatus('connection closed \u00b7 reconnecting\u2026')
-  setTimeout(connect, 2000)
+  setTimeout(connect, reconnect.next())
 }
 
 // --- start -------------------------------------------------------------------
