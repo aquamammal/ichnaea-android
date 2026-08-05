@@ -61,13 +61,12 @@ let teardropGeo = null
 function teardropGeometry () {
   if (!teardropGeo) {
     const pts = []
-    const N = 28
+    const N = 32
     for (let i = 0; i <= N; i++) {
       const t = i / N
       let r
-      if (t < 0.45) r = 0.28 * Math.pow(t / 0.45, 1.6) // long visible point
-      else if (t < 0.7) r = 0.28 + 0.34 * ((t - 0.45) / 0.25) // widen to bulb
-      else r = 0.62 * (1 - ((t - 0.7) / 0.3) * 0.25) // rounded top
+      if (t < 0.7) r = 0.62 * Math.pow(t / 0.7, 1.4) // point widening to the bulb
+      else r = 0.62 * Math.pow(Math.max(1 - (t - 0.7) / 0.3, 0), 1.1) // dome closing at the top
       pts.push(new THREE.Vector2(Math.max(r, 0.015), t))
     }
     teardropGeo = new THREE.LatheGeometry(pts, 24)
