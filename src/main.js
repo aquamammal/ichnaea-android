@@ -1,6 +1,7 @@
 import { classify, humanize, formatLocal, STATUS } from './staleness.js'
 import { createRenderer } from './renderer.js'
-import { MAP_STYLES, getMapStyleId, setMapStyleId } from './map-styles.js'
+import { MAP_STYLES, getMapStyleId, setMapStyleId, getColored, setColored } from './map-styles.js'
+import QRCode from 'qrcode/lib/browser.js'
 
 // Renderer for Ichnaea Android. This is a THIN PIPE CLIENT: it owns only the
 // globe, the UI, and geolocation. ALL P2P state (identity, contacts, the local
@@ -12,6 +13,8 @@ const $ = (id) => document.getElementById(id)
 const els = {
   peerDot: $('peer-dot'), peerStatus: $('peer-status'), gpsStatus: $('gps-status'),
   myPubkey: $('my-pubkey'), contactsList: $('contacts-list'),
+  btnQr: $('btn-qr'), modalQr: $('modal-qr'), qrCanvas: $('qr-canvas'), qrKey: $('qr-key'), qrClose: $('qr-close'),
+  colorToggle: $('btn-color-countries'), colorVal: $('color-countries-val'),
   panelTopleft: $('panel-topleft'), panelContacts: $('panel-contacts'),
   modalAdd: $('modal-add'), addNick: $('add-nickname'), addPub: $('add-pubkey'), addErr: $('add-error'),
   modalSet: $('modal-settings'), setInterval: $('set-interval'), setErr: $('set-error'), setMapStyle: $('set-mapstyle'),
@@ -47,12 +50,26 @@ const state = {
   intervalMs: DEFAULT_INTERVAL_MS,
   contacts: [],
   manual: { enabled: false, lat: null, lng: null },
-  pinScale: 1
+  pinScale: 1,
+  colored: getColored()
 }
 
 // --- globe -------------------------------------------------------------------
 function initGlobe () {
-  state.globe = createRenderer($('globe'), { onPinClick: showPinOverlay })
+  state.globe = createRenderer($('globe'), { onPinClick: showPinOverlay, colored: state.colored })
+}
+
+function syncColorToggle () {
+  if (!els.colorToggle || !els.colorVal) return
+  els.colorVal.textContent = state.colored ? 'On' : 'Off'
+}
+
+function onColorToggle () {
+  state.colored = !state.colored
+  setColored(state.colored)
+  syncColorToggle()
+  if (state.globe && typeof state.globe.setColored === 'function') state.globe.setColored(state.colored)
+  toast('Colored countries: ' + (state.colored ? 'on' : 'off'))
 }
 
 function showPinOverlay (data) {
@@ -322,6 +339,23 @@ function initUI () {
     } catch { toast('Copy failed \u2014 select and copy manually') }
   })
 
+  if (els.colorToggle) {
+    els.colorToggle.addEventListener('click', onColorToggle)
+    syncColorToggle()
+  }
+  if (els.btnQr) {
+    els.btnQr.addEventListener('click', openQrModal)
+    if (els.qrClose) els.qrClose.addEventListener('click', () => closeModal(els.modalQr))
+    if (els.qrKey) {
+      els.qrKey.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(els.qrKey.textContent)
+          toast('Public key copied')
+        } catch { toast('Copy failed \u2014 select and copy manually') }
+      })
+    }
+  }
+
   els.versionTag.addEventListener('dblclick', () => { syncStyleToggleLabel(); els.devPanel.classList.toggle('open') })
   $('btn-dev-close').addEventListener('click', () => els.devPanel.classList.remove('open'))
   $('btn-force-200').addEventListener('click', onForce200)
@@ -348,6 +382,26 @@ function onCycleMapStyle () {
 
 function openModal (m) { m.classList.add('open') }
 function closeModal (m) { m.classList.remove('open'); const e = m.querySelector('.form-error'); if (e) e.textContent = '' }
+
+// QR share of your public key — scannable by a friend's phone to add you as a
+// contact. Generated locally (qrcode lib, bundled — no network).
+async function openQrModal () {
+  const key = els.myPubkey.textContent || ''
+  if (!key || key === '\u2026' || key === '') {
+    toast('No public key yet')
+    return
+  }
+  try {
+    els.qrKey.textContent = key
+    if (els.qrCanvas && els.qrCanvas.getContext) {
+      const size = Math.min(els.qrCanvas.clientWidth || 260, 260)
+      await QRCode.toCanvas(els.qrCanvas, key, { margin: 2, width: size, errorCorrectionLevel: 'M' })
+    }
+    openModal(els.modalQr)
+  } catch (err) {
+    toast('QR failed: ' + String(err && err.message || err))
+  }
+}
 
 function syncManualUI () {
   const m = state.manual || {}

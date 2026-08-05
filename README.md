@@ -84,10 +84,15 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 | Map — Centered on Me | 2D | equirectangular centered on your current check-in location |
 | Map — Dymaxion | 2D | Buckminster Fuller's Airocean ("Dymaxion") projection |
 
-- `src/map-styles.js` — the style registry + persistence (`mapStyle` key, backward-compatible with the old `globe` 3d/2d key and the older `map-world`/`map-taiwan` ids).
+- `src/map-styles.js` — the style registry + persistence (`mapStyle` key, backward-compatible with the old `globe` 3d/2d key and the older `map-world`/`map-taiwan` ids) + the **colored-countries** toggle persistence (`coloredCountries` key).
 - `src/renderer.js` — the dispatcher: picks 3D vs 2D from the chosen style; if a globe style is selected but WebGL is unavailable, it transparently falls back to the 2D map.
 - `src/globe-renderer.js` — the 3D globe, styled by id (wireframe / texture / colored countries).
 - `src/map2d.js` — the 2D canvas map, using `d3-geo` projections (`geoEquirectangular` for Map / Centered-on-Me, `geoAirocean` for Dymaxion) with pan, pinch/wheel zoom, and pin hit-testing via `projection.invert`. The Centered-on-Me style re-centers on the self pin whenever you check in.
+- `src/country-colors.js` — the shared per-country color palette used by both the 2D maps and the 3D globe, so a country looks the same in every projection.
+
+**Colored countries toggle** — a live button on the Check-In Beacon tile (`Colored countries` On/Off) fills each country with its own hue. It applies to **every** view: all three 2D maps and all three 3D globe styles (including the wireframe globe). The toggle is persisted (`coloredCountries`), applied at boot via `createRenderer({ colored })`, and toggles in place via the renderer's `setColored()` — no reload needed.
+
+**QR code sharing** — the `QR` button next to your public key renders it as a scannable QR code (locally via the bundled `qrcode` lib — no network), with the key text underneath for manual copy. A friend scans it into Ichnaea's "Add Contact" to pair.
 
 All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 

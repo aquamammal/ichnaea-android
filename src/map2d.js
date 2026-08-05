@@ -18,6 +18,7 @@
 import WORLD from './assets/world.js'
 import { geoEquirectangular, geoPath, geoGraticule10 } from 'd3-geo'
 import { geoAirocean } from 'd3-geo-polygon'
+import { countryColors } from './country-colors.js'
 
 const COLOR_SELF = '#3b9dff'
 const COLOR_ACTIVE = '#3ddc84'
@@ -27,6 +28,10 @@ const COLOR_OCEAN = '#0a0e14'
 const COLOR_LAND = '#1d2735'
 const COLOR_LAND_STROKE = '#2c3a4d'
 const COLOR_GRID = 'rgba(255,255,255,0.05)'
+
+// Colored-countries mode fills each country with its own hue (see
+// country-colors.js) and keeps the dark ocean + subtle borders.
+const COUNTRY_FILLS = countryColors(WORLD.features)
 
 const HIT_RADIUS_PX = 10
 
@@ -53,8 +58,9 @@ function makeProjection (styleId, width, height, center) {
   return proj.fitSize([width, height], sphere)
 }
 
-export function create2DRenderer (container, { onPinClick, style } = {}) {
-  const styleId = style || 'map-world'
+export function create2DRenderer (container, { onPinClick, style, colored } = {}) {
+  const styleId = style || 'map'
+  let coloredMode = Boolean(colored)
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;'
   container.style.position = 'relative'
@@ -78,6 +84,7 @@ export function create2DRenderer (container, { onPinClick, style } = {}) {
   const canCache = typeof Path2D === 'function'
   let landPath = null
   let gridPath = null
+  let countryPaths = null // per-country Path2D for colored mode (fit-time cache)
   // Interactive view: zoom is a relative multiplier on baseScale; panX/panY are
   // pixel offsets added to the projection's translate.
   let zoom = 1
@@ -116,17 +123,18 @@ export function create2DRenderer (container, { onPinClick, style } = {}) {
         const gen = geoPath(proj) // string generator (no ctx)
         gridPath = new Path2D(gen(graticule))
         landPath = new Path2D()
-        for (const f of WORLD.features) {
-          const g = f.geometry
-          if (!g) continue
-          landPath.addPath(new Path2D(gen(g)))
-        }
+        countryPaths = WORLD.features.map((f) => {
+          const p = new Path2D(gen(f.geometry))
+          landPath.addPath(p)
+          return p
+        })
       } catch (err) {
         // Some WebViews lack Path2D.addPath or throw on huge strings — degrade
         // gracefully to per-frame re-projection.
         console.warn('[map] Path2D cache failed, falling back to re-projection:', err && err.message)
         landPath = null
         gridPath = null
+        countryPaths = null
       }
     }
   }
@@ -151,10 +159,18 @@ export function create2DRenderer (container, { onPinClick, style } = {}) {
     ctx.strokeStyle = COLOR_GRID
     ctx.lineWidth = 1 / zoom
     ctx.stroke(gridPath)
-    // Landmass
-    ctx.fillStyle = COLOR_LAND
-    ctx.fill(landPath, 'evenodd')
-    ctx.strokeStyle = COLOR_LAND_STROKE
+    if (coloredMode && countryPaths) {
+      // Each country filled with its own hue (colored-countries mode).
+      countryPaths.forEach((p, i) => {
+        ctx.fillStyle = COUNTRY_FILLS[i]
+        ctx.fill(p, 'evenodd')
+      })
+      ctx.strokeStyle = 'rgba(5,15,30,0.4)'
+    } else {
+      ctx.fillStyle = COLOR_LAND
+      ctx.fill(landPath, 'evenodd')
+      ctx.strokeStyle = COLOR_LAND_STROKE
+    }
     ctx.lineWidth = 1 / zoom
     ctx.stroke(landPath)
     ctx.restore()
@@ -168,17 +184,31 @@ export function create2DRenderer (container, { onPinClick, style } = {}) {
     path(graticule)
     ctx.stroke()
 
-    ctx.fillStyle = COLOR_LAND
-    ctx.strokeStyle = COLOR_LAND_STROKE
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    for (const f of WORLD.features) {
-      const g = f.geometry
-      if (!g) continue
-      path(g)
+    if (coloredMode) {
+      WORLD.features.forEach((f, i) => {
+        ctx.beginPath()
+        path(f.geometry)
+        ctx.fillStyle = COUNTRY_FILLS[i]
+        ctx.fill('evenodd')
+      })
+      ctx.strokeStyle = 'rgba(5,15,30,0.4)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      for (const f of WORLD.features) { if (f.geometry) path(f.geometry) }
+      ctx.stroke()
+    } else {
+      ctx.fillStyle = COLOR_LAND
+      ctx.strokeStyle = COLOR_LAND_STROKE
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      for (const f of WORLD.features) {
+        const g = f.geometry
+        if (!g) continue
+        path(g)
+      }
+      ctx.fill('evenodd')
+      ctx.stroke()
     }
-    ctx.fill('evenodd')
-    ctx.stroke()
   }
 
   // --- drawing ----------------------------------------------------------------
@@ -424,5 +454,11 @@ export function create2DRenderer (container, { onPinClick, style } = {}) {
     canvas.style.filter = on ? 'grayscale(1)' : ''
   }
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, resize, globe: null, webgl: false }
+  // Live toggle for colored-countries mode (no rebuild — just redraw).
+  function setColored (on) {
+    coloredMode = Boolean(on)
+    draw()
+  }
+
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, resize, globe: null, webgl: false }
 }

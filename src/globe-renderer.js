@@ -1,6 +1,7 @@
 import Globe from 'globe.gl'
 import * as THREE from 'three'
 import WORLD from './assets/world.js'
+import { countryColors } from './country-colors.js'
 
 // 3D WebGL globe renderer. Callers (the dispatcher in src/renderer.js) choose
 // a map style first (src/map-styles.js) and pass a 3D style id here:
@@ -70,32 +71,20 @@ function contactColor (id, dim) {
   return dim ? `hsla(${hue}, 60%, 45%, 0.5)` : `hsl(${hue}, 75%, 62%)`
 }
 
-// Stable per-country color for the "colored countries" style (hue hashed from
-// the feature index — the bundled data has no properties). `dim` produces a
-// darker, more saturated fill so borders stay readable.
-const countryColorCache = new Map()
-function countryColor (index, dim) {
-  const key = dim ? 'd' + index : 'b' + index
-  if (countryColorCache.has(key)) return countryColorCache.get(key)
-  let h = 2654435761
-  h = ((h * 33) + index * 2654435761) >>> 0
-  const hue = h % 360
-  const c = dim ? `hsl(${hue}, 65%, 42%)` : `hsl(${hue}, 62%, 52%)`
-  countryColorCache.set(key, c)
-  return c
-}
-
 // Pre-build feature -> index lookups once (features are stable module data).
 const featureIndex = new Map()
 WORLD.features.forEach((f, i) => featureIndex.set(f, i))
 
+// Shared per-country palette (matches the 2D map renderer).
+const COUNTRY_FILLS = countryColors(WORLD.features)
+
 // A per-country fill color accessor that three-globe calls with each feature.
 const countryCapColor = (d) => {
   const i = featureIndex.get(d)
-  return countryColor(typeof i === 'number' ? i : 0, false)
+  return COUNTRY_FILLS[typeof i === 'number' ? i : 0]
 }
 
-export function createGlobeRenderer (container, { onPinClick, style } = {}) {
+export function createGlobeRenderer (container, { onPinClick, style, colored } = {}) {
   // 3D globe only. Map styles and WebGL unavailability are handled by the
   // dispatcher / fallback in the caller.
   if (!webglAvailable()) throw new Error('webgl-unavailable')
@@ -103,6 +92,7 @@ export function createGlobeRenderer (container, { onPinClick, style } = {}) {
   const isTexture = style === 'globe-texture'
   const isCountries = style === 'globe-countries'
   const isWireframe = !isTexture && !isCountries
+  let coloredMode = Boolean(colored)
 
   let globe
   try {
@@ -125,7 +115,36 @@ export function createGlobeRenderer (container, { onPinClick, style } = {}) {
       .polygonsData(WORLD.features)
       .polygonAltitude(0.001)
       .onPointClick((pt) => { if (onPinClick && pt && pt.data) onPinClick(pt.data) })
+  } catch (err) {
+    // THREE.WebGLRenderer throws when the WebGL context can't be created even
+    // though the pre-check passed.
+    console.error('[globe] 3D init failed:', err && err.message)
+    throw err
+  }
 
+  // Configure the earth surface. `colored` overlays the shared country palette
+  // on top of ANY style (wireframe, texture, or the countries style itself),
+  // live — the toggle calls setColored() and this re-applies in place.
+  function applySurface (colored) {
+    if (colored) {
+      // Colored-countries overlay: each country filled with its own hue over
+      // blue water, side walls matching the fill (no transparent seams), plates
+      // raised so they sit clearly above the sphere.
+      globe
+        .polygonAltitude(0.004)
+        .polygonCapColor(countryCapColor)
+        .polygonSideColor(countryCapColor)
+        .polygonStrokeColor(() => 'rgba(5,15,30,0.4)')
+      try {
+        const mat = globe.globeMaterial()
+        if (mat) {
+          mat.color = new THREE.Color('#123c6b') // blue water under the countries
+          mat.needsUpdate = true
+        }
+      } catch { /* non-fatal */ }
+      return
+    }
+    // Base style surface.
     if (isTexture) {
       // Full-color Blue Marble earth (bundled locally — no network calls).
       globe.globeImageUrl('./assets/earth-blue-marble.jpg')
@@ -134,10 +153,7 @@ export function createGlobeRenderer (container, { onPinClick, style } = {}) {
         .polygonSideColor(() => 'rgba(0,0,0,0)')
         .polygonStrokeColor(() => 'rgba(255,255,255,0.18)')
     } else if (isCountries) {
-      // Distinct country fills on a blue-ocean sphere for legibility. Each
-      // country's side wall is its own color (no transparent seams), and the
-      // altitude is raised so the plates sit clearly above the water instead
-      // of z-fighting/tiling against the sphere.
+      // Distinct country fills on a blue-ocean sphere for legibility.
       globe
         .polygonAltitude(0.004)
         .polygonCapColor(countryCapColor)
@@ -146,32 +162,28 @@ export function createGlobeRenderer (container, { onPinClick, style } = {}) {
     } else {
       // Wireframe: transparent countries, borders drawn as lines.
       globe
+        .polygonAltitude(0.001)
         .polygonCapColor(() => 'rgba(0,0,0,0)')
         .polygonSideColor(() => 'rgba(0,0,0,0)')
         .polygonStrokeColor(() => 'rgba(148,163,184,0.5)')
     }
-  } catch (err) {
-    // THREE.WebGLRenderer throws when the WebGL context can't be created even
-    // though the pre-check passed.
-    console.error('[globe] 3D init failed:', err && err.message)
-    throw err
+    // Configure the earth material per base style.
+    try {
+      const mat = globe.globeMaterial()
+      if (mat) {
+        if (isTexture) {
+          mat.color = new THREE.Color('#ffffff') // let the texture show
+        } else if (isCountries) {
+          mat.color = new THREE.Color('#123c6b') // blue water under the countries
+        } else {
+          mat.color = new THREE.Color('#0a1a2e') // dark sphere + border lines
+        }
+        mat.needsUpdate = true
+      }
+    } catch { /* non-fatal */ }
   }
 
-  // Configure the earth surface per style.
-  try {
-    const mat = globe.globeMaterial()
-    if (mat) {
-      if (isTexture) {
-        // Let the texture show; tone down the tint multiplier.
-        mat.color = new THREE.Color('#ffffff')
-      } else if (isCountries) {
-        mat.color = new THREE.Color('#123c6b') // blue water under the countries
-      } else {
-        mat.color = new THREE.Color('#0a1a2e') // dark sphere + border lines
-      }
-      mat.needsUpdate = true
-    }
-  } catch { /* non-fatal */ }
+  applySurface(coloredMode)
 
   const pins = new Map() // id -> { id, lat, lng, alt, color, size, data }
   let selfLoc = null
@@ -356,5 +368,11 @@ export function createGlobeRenderer (container, { onPinClick, style } = {}) {
   }
   requestAnimationFrame(tick)
 
-  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, resize, globe, webgl: true }
+  // Live toggle for colored-countries mode (re-applies the surface in place).
+  function setColored (on) {
+    coloredMode = Boolean(on)
+    applySurface(coloredMode)
+  }
+
+  return { setSelf, upsertContactPin, removeContactPin, hasPin, setPinScale, setGrayscale, setColored, resize, globe, webgl: true }
 }

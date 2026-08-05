@@ -58,3 +58,21 @@ export function getMapStyle (id) {
   const found = MAP_STYLES.find((s) => s.id === (id || getMapStyleId()))
   return found || MAP_STYLES[0]
 }
+
+// "Colored countries" toggle (independent of the map style): fills each country
+// with its own hue in every projection and on the globe. Persisted separately.
+const COLORED_KEY = 'coloredCountries'
+
+export function getColored () {
+  try {
+    const v = (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem(COLORED_KEY))
+    return v === '1' || v === 'true'
+  } catch { /* ignore */ }
+  return false
+}
+
+export function setColored (on) {
+  try {
+    window.localStorage.setItem(COLORED_KEY, on ? '1' : '0')
+  } catch { /* ignore */ }
+}
