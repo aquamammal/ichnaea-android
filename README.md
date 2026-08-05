@@ -90,6 +90,7 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 - `src/map2d.js` — the 2D canvas map, using `d3-geo` projections (`geoEquirectangular` for Map / Centered-on-Me, `geoAirocean` for Dymaxion) with pan, pinch/wheel zoom, and pin hit-testing via `projection.invert`. The Centered-on-Me style re-centers on the self pin whenever you check in.
 - `src/country-colors.js` — the shared per-country color palette used by both the 2D maps and the 3D globe, so a country looks the same in every projection.
 - `src/scanner.js` — the camera QR scanner (`getUserMedia` + `jsqr`, fully on-device) that powers Add Contact's **Scan QR code** button.
+- `src/updates.js` — the manual update check (Settings → **Check for updates**): fetches the latest GitHub Release tag only when tapped and compares versions.
 
 **Colored countries toggle** — a live button on the Check-In Beacon tile (`Colored countries` On/Off) fills each country with its own hue. It applies to **every** view: all three 2D maps and all three 3D globe styles (including the wireframe globe). The toggle is persisted (`coloredCountries`), applied at boot via `createRenderer({ colored })`, and toggles in place via the renderer's `setColored()` — no reload needed.
 
@@ -100,6 +101,8 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 **Name yourself** — **Settings → Your name** is sent with every check-in, so contacts see who you are. They can still rename you locally; your name appears under whatever nickname they chose.
 
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
+
+**Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists (with a tap-to-download link). It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry).
 
 All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 
@@ -124,7 +127,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.1-debug.apk
-- SHA-256: `bdb54f9b9e240d049b7fcd95e5528d8e8991caa736b8a55d5d9d1b3e8995c7e4`
+- SHA-256: `cd514cb8ae07b59de87a3aa10fe0807613709b28855ce6421fea0617687f3dc6`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -141,6 +144,17 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > committed before the artifact was refreshed, so the GitHub link served a build
 > without it. Commit the refreshed APK + new SHA with the feature change, then
 > push. Do not land a feature without its updated artifact.
+>
+> **Also publish a GitHub Release per version** — the in-app **Check for updates**
+> reads `releases/latest`, so a new version is only detected once it's tagged and
+> the APK attached:
+>
+> ```bash
+> gh release create v0.2.2 dist/ichnaea-android-v0.2.2-debug.apk --title "Ichnaea Android v0.2.2"
+> ```
+>
+> Bump `package.json` + `versionName`/`versionCode` in the same change so the
+> release tag, the APK, and the in-app version all agree.
 >
 > **Note:** the `android/` platform directory is gitignored (it's regenerated
 > locally by Capacitor); the committed artifact is the `dist/` APK. The native
