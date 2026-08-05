@@ -33,7 +33,7 @@ Runs the full Hyperswarm/Hypercore P2P stack on Android via **NodeJS-Mobile** (e
 git clone https://github.com/aquamammal/ichnaea-android.git
 cd ichnaea-android
 npm install
-npx cap add android   # generates android/ once (already committed)
+npx cap add android   # generates android/ locally (gitignored; see the regeneration caveats below)
 ```
 
 ## Build & install (CLI)
@@ -166,9 +166,14 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > **Note:** the `android/` platform directory is gitignored (it's regenerated
 > locally by Capacitor); the committed artifact is the `dist/` APK. The native
-> manifest (`android/app/src/main/AndroidManifest.xml`) carries the `CAMERA`
-> permission used for QR scanning — if you ever regenerate the platform
-> (`npx cap add android`), re-add `<uses-permission android:name="android.permission.CAMERA" />`.
+> layer lives only in the locally-generated `android/` and is **not** in git, so
+> if you ever regenerate the platform (`npx cap add android`) you must re-apply
+> all of the following by hand:
+>
+> - Re-add `<uses-permission android:name="android.permission.CAMERA" />` (QR scanning).
+> - Re-add `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />` (in-app update install).
+> - Re-add the `IchnaeaUpdaterPlugin.java` class and register it in `MainActivity` (`registerPlugin(IchnaeaUpdaterPlugin.class)` in `onCreate`) — powers in-app APK download/install. It relies on the existing `FileProvider` (`${applicationId}.fileprovider`) + `res/xml/file_paths.xml` `cache-path`, which Capacitor's generated manifest already includes.
+> - Re-apply any other `android/` customizations from `scripts/native-assets.mjs` notes (e.g. `NodeService.java`, the `CAMERA`/`POST_NOTIFICATIONS` permissions, the JNI bridge).
 
 Or build it yourself from this repo:
 
