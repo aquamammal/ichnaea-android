@@ -110,6 +110,10 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Reliability** — contact discovery runs in parallel at startup, the peer-status line shows **Connecting to contacts…** while discovery is in progress, and the app auto-reconnects with exponential backoff (capped at 30s) if the connection drops. The DHT can be pointed at known bootstrap nodes via the `ICHNAEA_BOOTSTRAP` env var.
 
+**Check-in history & NEW badges** — tap a contact to open their **recent check-in history** (times + coordinates). Contacts that checked in since you last opened the app get a **NEW** badge, cleared when you view their history.
+
+**Your name at your pin** — tapping your own pin shows your self-chosen name (**Settings → Your name**) instead of just "You".
+
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
 
 **Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists. When one is available it shows an **Update now** button that downloads the new APK **in the app** and hands it to the Android package installer (via the native `IchnaeaUpdater` plugin), so you can update without leaving Ichnaea. It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry). On the first in-app update Android 8+ will ask you to allow Ichnaea to "Install unknown apps" — enable it, then tap Update again.
@@ -140,8 +144,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.4-debug.apk
-- SHA-256: `80cd1baa6065895ff11f03952c16250b0b38a34a89e7178b9535bb4493373a45`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.5-debug.apk
+- SHA-256: `24d59f9a8d33fb1a55c71ee1d3f4f58c837691e9e63f0934b9cb1389219c2930`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -150,8 +154,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.4-debug.apk
-> sha256sum dist/ichnaea-android-v0.2.4-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.5-debug.apk
+> sha256sum dist/ichnaea-android-v0.2.5-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -164,7 +168,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.2.4 dist/ichnaea-android-v0.2.4-debug.apk --title "Ichnaea Android v0.2.4"
+> gh release create v0.2.5 dist/ichnaea-android-v0.2.5-debug.apk --title "Ichnaea Android v0.2.5"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the

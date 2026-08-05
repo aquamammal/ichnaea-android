@@ -91,6 +91,12 @@
         padding: 7px 6px; border-radius: 8px; font-size: 13px;
       }
       .contact-top { display: flex; align-items: center; gap: 8px; width: 100%; }
+      .contact-item.unread { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+      .new-badge { flex: none; font-size: 9px; font-weight: 700; letter-spacing: .04em; color: #04121f; background: var(--accent); border-radius: 8px; padding: 1px 6px; }
+      .history-list { max-height: 42vh; overflow-y: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+      .history-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; padding: 5px 8px; border-radius: 6px; background: rgba(12, 17, 24, 0.55); }
+      .history-time { color: var(--text); }
+      .history-coords { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
       .contact-coords { font-size: 11px; color: var(--muted); padding: 2px 0 0 16px; font-family: ui-monospace, Menlo, Consolas, monospace; }
       .contact-fingerprint { font-size: 10px; color: var(--muted); padding: 2px 0 0 16px; font-family: ui-monospace, Menlo, Consolas, monospace; opacity: 0.75; }
       .contact-item + .contact-item { border-top: 1px solid rgba(255,255,255,0.05); }
@@ -154,7 +160,7 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2 id="beacon-title">Ichnaea Ver. 0.2.4</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.2.5</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
@@ -305,6 +311,17 @@
       <div class="kv">Fingerprint: <b id="pin-fingerprint">—</b></div>
     </div>
 
+    <!-- Check-in history timeline (tap a contact to open) -->
+    <div class="modal-backdrop" id="modal-history">
+      <div class="modal">
+        <h3 id="history-title">Check-in history</h3>
+        <div id="history-list" class="history-list"></div>
+        <div class="actions">
+          <button id="history-close">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Unlock modal (shown when local data is passphrase-encrypted) -->
     <div class="modal-backdrop" id="modal-unlock">
       <div class="modal">
@@ -329,8 +346,8 @@
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.2.4</div>
+    <div id="version-tag">ichnaea-android v0.2.5</div>
 
-    <script type="module" src="./main.bundle.js?v=1785942660889"></script>
+    <script type="module" src="./main.bundle.js?v=1785943504779"></script>
   </body>
 </html>

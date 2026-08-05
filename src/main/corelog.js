@@ -67,6 +67,35 @@ export async function readLatest (core, logKey) {
   }
 }
 
+// Decode the last `n` entries from a core (local or replicated) as
+// `[{ lat, lng, timestamp, name }]`, oldest→newest. Same key-fallback logic as
+// readLatest; skips unparseable blocks. Returns [] for an empty/missing core.
+export async function readHistory (core, logKey, n = 20) {
+  if (!core || !core.length) return []
+  const keys = Array.isArray(logKey) ? logKey : (logKey ? [logKey] : [])
+  const start = Math.max(0, core.length - n)
+  const out = []
+  for (let i = start; i < core.length; i++) {
+    let block
+    try {
+      block = await core.get(i)
+    } catch {
+      continue // block not replicated locally yet
+    }
+    let plain = null
+    for (const k of keys) {
+      const p = decrypt(block, k)
+      if (p) { plain = p; break }
+    }
+    if (!plain) plain = block
+    try {
+      const e = JSON.parse(b4a.toString(plain))
+      if (e && typeof e.lat === 'number') out.push(e)
+    } catch { /* skip unparseable */ }
+  }
+  return out
+}
+
 // --- Contact core replication ------------------------------------------------
 
 // Storage directory for a contact's replicated core, keyed by their core key

@@ -3,7 +3,7 @@ import { pubToB64, deriveAtRestKey, generateSalt } from '../crypto.js'
 import { createSwarmManager } from '../swarm.js'
 import { loadOrCreateIdentity, rotateIdentityLogKey, persistIdentity } from './identity.js'
 import * as contacts from './contacts.js'
-import { openLocalCore, appendCheckin, readLatest, replicateContactCore, MAX_ENTRIES } from './corelog.js'
+import { openLocalCore, appendCheckin, readLatest, readHistory, replicateContactCore, MAX_ENTRIES } from './corelog.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { createMainScheduler } from './scheduler.js'
 import { snapCoords, PRECISION_KM_OPTIONS } from './precision.js'
@@ -408,6 +408,23 @@ export async function createMainApp ({ pipe }) {
         } else {
           throw new Error('Contact not found')
         }
+        return
+      }
+
+      if (msg.type === 'contact:history') {
+        // Return the last N decrypted check-ins from a contact's replicated core
+        // (paged history for the timeline panel).
+        const contact = await contacts.getContact(msg.contactId)
+        const entry = contact && state.contactCores.get(msg.contactId)
+        const core = entry && entry.core
+        if (!contact || !core) {
+          send({ type: 'contact:history', id: msg.id, contactId: msg.contactId, entries: [] })
+          return
+        }
+        const logKey = contact.logKeyHex ? b4a.from(contact.logKeyHex, 'hex') : null
+        const limit = Math.min(Number(msg.limit) || 20, 50)
+        const entries = await readHistory(core, logKey, limit)
+        send({ type: 'contact:history', id: msg.id, contactId: msg.contactId, entries })
         return
       }
 

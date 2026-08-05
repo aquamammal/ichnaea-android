@@ -28,6 +28,7 @@ const els = {
   setSelfName: $('set-selfname'),
   btnCheckUpdates: $('btn-check-updates'), btnUpdateNow: $('btn-update-now'), updatesStatus: $('updates-status'), updatesDetail: $('updates-detail'),
   modalUnlock: $('modal-unlock'), unlockPass: $('unlock-passphrase'), unlockErr: $('unlock-error'), unlockConfirm: $('unlock-confirm'),
+  modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
@@ -127,7 +128,7 @@ function onArcsToggle () {
 
 function showPinOverlay (data) {
   if (data.self) {
-    els.pinName.textContent = 'You'
+    els.pinName.textContent = state.selfName || 'You'
     els.pinTime.textContent = '\u2014'
     els.pinAgo.textContent = '\u2014'
     els.pinStatus.textContent = 'self'
@@ -215,6 +216,9 @@ function handlePush (msg) {
     }
     case 'contact:update': {
       upsertContact(msg.contact)
+      // A live check-in from a contact that's newer than this session's boot
+      // marks the contact NEW (cleared when their history is opened).
+      if (msg.contact.lastSeenTs > bootTs) markUnread(msg.contact.id)
       break
     }
     case 'contact:remove-pin': {
@@ -283,6 +287,75 @@ function pinCoords (contactId) {
 }
 
 // --- contacts UI -------------------------------------------------------------
+// NEW-contact badge state: a contact is "new/unread" if it checked in since the
+// app was last open (persisted lastOpenTs) or received a live check-in after
+// this session's boot. Cleared when the row is tapped (history opened).
+const UNREAD_KEY = 'ichnaea-seen'
+let bootTs = Date.now()
+let unreadIds = new Set()
+
+function loadUnread () {
+  try {
+    const s = JSON.parse(localStorage.getItem(UNREAD_KEY) || '{}')
+    return { lastOpen: Number(s.lastOpen) || 0, unread: Array.isArray(s.unread) ? s.unread : [] }
+  } catch { return { lastOpen: 0, unread: [] } }
+}
+
+function saveUnread () {
+  try { localStorage.setItem(UNREAD_KEY, JSON.stringify({ lastOpen: Date.now(), unread: [...unreadIds] })) } catch { /* ignore */ }
+}
+
+// Seed the unread set from check-ins that happened while the app was closed.
+function seedUnread (contacts) {
+  const seen = loadUnread()
+  unreadIds = new Set(seen.unread)
+  const prevOpen = seen.lastOpen
+  for (const c of contacts) {
+    if (c.lastSeenTs > prevOpen) unreadIds.add(c.id)
+  }
+  saveUnread()
+}
+
+function markUnread (id) {
+  if (!unreadIds.has(id)) { unreadIds.add(id); saveUnread(); renderContactsList() }
+}
+
+function markRead (id) {
+  if (unreadIds.has(id)) { unreadIds.delete(id); saveUnread() }
+}
+
+// Open the check-in history timeline panel for a contact.
+async function openHistory (c) {
+  if (!els.modalHistory) return
+  els.historyTitle.textContent = (c.nickname || c.lastName || 'Contact') + ' \u2014 recent check-ins'
+  els.historyList.innerHTML = 'Loading\u2026'
+  openModal(els.modalHistory)
+  let entries = []
+  try {
+    const res = await request('contact:history', { contactId: c.id, limit: 20 }, 15000)
+    entries = res.entries || []
+  } catch {
+    entries = []
+  }
+  if (!entries.length) {
+    els.historyList.innerHTML = '<div class="empty">No check-in history yet.</div>'
+    return
+  }
+  els.historyList.innerHTML = ''
+  for (const e of entries) {
+    const row = document.createElement('div')
+    row.className = 'history-row'
+    const t = document.createElement('span')
+    t.className = 'history-time'
+    t.textContent = (e.timestamp ? formatLocal(e.timestamp) + ' \u00b7 ' + humanize(e.timestamp) : '\u2014')
+    const coords = document.createElement('span')
+    coords.className = 'history-coords'
+    coords.textContent = round(e.lat) + ', ' + round(e.lng)
+    row.append(t, coords)
+    els.historyList.appendChild(row)
+  }
+}
+
 function renderContactsList () {
   const list = els.contactsList
   if (!state.contacts.length) {
@@ -311,6 +384,13 @@ function renderContactsList () {
     rm.addEventListener('click', (e) => { e.stopPropagation(); onRemoveContact(c) })
     const top = document.createElement('div')
     top.className = 'contact-top'
+    if (unreadIds.has(c.id)) {
+      item.classList.add('unread')
+      const badge = document.createElement('span')
+      badge.className = 'new-badge'
+      badge.textContent = 'NEW'
+      top.append(badge)
+    }
     top.append(dot, name, ago, rm)
     item.appendChild(top)
     if (typeof c.lat === 'number' && typeof c.lng === 'number') {
@@ -327,7 +407,12 @@ function renderContactsList () {
       fpEl.title = 'Verify this over a second channel before sharing real location.'
       item.appendChild(fpEl)
     }
-    // Tap the contact row to center the map/globe on them.
+    // Tap a contact row to open its check-in history (and clear any NEW badge).
+    item.addEventListener('click', () => {
+      markRead(c.id)
+      openHistory(c)
+    })
+    // Tap the contact row to center the map/globe on them (legacy pin-center).
     item.addEventListener('click', () => {
       if (typeof c.lat === 'number' && typeof c.lng === 'number' && state.globe && typeof state.globe.centerOn === 'function') {
         state.globe.centerOn(c.lat, c.lng)
@@ -448,6 +533,9 @@ function initUI () {
   }
   if (els.btnEncrypt) {
     els.btnEncrypt.addEventListener('click', onEncryptToggle)
+  }
+  if (els.historyClose) {
+    els.historyClose.addEventListener('click', () => closeModal(els.modalHistory))
   }
   if (els.btnScanQr) {
     els.btnScanQr.addEventListener('click', onScanQr)
@@ -927,6 +1015,7 @@ async function loadState () {
   syncFreqDisplay()
   state.manual = res.manual || { enabled: false, lat: null, lng: null }
   state.contacts = res.contacts || []
+  seedUnread(state.contacts)
   state.selfName = res.selfName || ''
   state.precisionKm = typeof res.precisionKm === 'number' ? res.precisionKm : 0
   if (els.setPrecision) els.setPrecision.value = String(state.precisionKm)
