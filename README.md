@@ -92,7 +92,7 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Colored countries toggle** — a live button on the Check-In Beacon tile (`Colored countries` On/Off) fills each country with its own hue. It applies to **every** view: all three 2D maps and all three 3D globe styles (including the wireframe globe). The toggle is persisted (`coloredCountries`), applied at boot via `createRenderer({ colored })`, and toggles in place via the renderer's `setColored()` — no reload needed.
 
-**QR code sharing** — the `QR` button next to your public key renders it as a scannable QR code (locally via the bundled `qrcode` lib — no network), with the key text underneath for manual copy. A friend scans it into Ichnaea's "Add Contact" to pair.
+**QR code sharing** — the `QR` button next to your public key renders it as a scannable QR code (locally via the bundled `qrcode` lib — no network), with the key text underneath for manual copy. A friend scans it with their camera (or any QR reader) to get your Base64 public key for "Add Contact" — or just taps the key text to copy it.
 
 All surfaces derive from the bundled Natural Earth data + Blue Marble texture — no CDN, no tile servers.
 
@@ -117,7 +117,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.0-debug.apk
-- SHA-256: `8c964a073c53d2441faa3822232c95b4a0bcef79859c370eb030705b84c7c59a`
+- SHA-256: `19549c2a2b028ddb90d48bdd7dfdf89329571d2f2737abbe2389ee98f7a97d71`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -171,9 +171,12 @@ On their phone (varies by Android version):
 
 ### 5. Pair with someone
 
-- Both people run the app, copy their **public key** (tap it in the top-left panel).
-- Swap keys **out-of-band** (any trusted channel), then each taps **Add Contact** and pastes the other's key.
-- **Both must add each other.** Same Wi-Fi connects fast; over the internet allow 10–30 s for DHT discovery.
+Two ways to exchange public keys:
+
+- **QR (phone-to-phone):** one person taps **QR** next to their public key (top-left panel) to show it as a scannable code. The other person scans it with their phone camera or any QR reader, gets the Base64 key text, then taps **Add Contact** and pastes it.
+- **Copy / paste (phone-to-phone or phone-to-desktop):** each person copies their **public key** (tap it in the top-left panel), swaps keys **out-of-band** (any trusted channel — messaging app, in person, etc.), then taps **Add Contact** and pastes the other's key.
+
+**Both must add each other.** Same Wi-Fi connects fast; over the internet allow 10–30 s for DHT discovery.
 
 ### Notes for testers
 
