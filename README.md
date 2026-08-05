@@ -119,6 +119,22 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.0-debug.apk
 - SHA-256: `8c964a073c53d2441faa3822232c95b4a0bcef79859c370eb030705b84c7c59a`
 
+> **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
+> distribution artifact — it must always be the **current build**, not a stale one.
+> After every code change that affects the app (renderer, node process, assets,
+> version bump), **rebuild and re-publish it in the same commit**:
+>
+> ```bash
+> npm run build:apk
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.0-debug.apk
+> sha256sum dist/ichnaea-android-v0.2.0-debug.apk   # update the SHA-256 above
+> ```
+>
+> A stale dist APK silently ships old behavior — e.g. the QR share feature was
+> committed before the artifact was refreshed, so the GitHub link served a build
+> without it. Commit the refreshed APK + new SHA with the feature change, then
+> push. Do not land a feature without its updated artifact.
+
 Or build it yourself from this repo:
 
 ```bash
