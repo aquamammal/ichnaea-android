@@ -1,12 +1,13 @@
 import b4a from 'b4a'
-import { pubToB64 } from '../crypto.js'
+import { pubToB64, deriveAtRestKey, generateSalt } from '../crypto.js'
 import { createSwarmManager } from '../swarm.js'
-import { loadOrCreateIdentity } from './identity.js'
+import { loadOrCreateIdentity, rotateIdentityLogKey, persistIdentity } from './identity.js'
 import * as contacts from './contacts.js'
 import { openLocalCore, appendCheckin, readLatest, replicateContactCore, MAX_ENTRIES } from './corelog.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { createMainScheduler } from './scheduler.js'
 import { snapCoords, PRECISION_KM_OPTIONS } from './precision.js'
+import { configureAtRest, readAtRestMarker, writeAtRestMarker } from './fsx.js'
 
 // Main-process P2P orchestrator. Owns the entire P2P stack (identity, local
 // Hypercore on the filesystem, Hyperswarm, contact-core replication, and the
@@ -57,6 +58,8 @@ export async function createMainApp ({ pipe }) {
     swarm: null,
     scheduler: null,
     settings: null,
+    atRest: { enabled: false, salt: null, unlocked: false }, // passphrase at-rest encryption
+    locked: false,
     contactCores: new Map() // contactId -> { coreKeyHex, core, lastLen, timer }
   }
   // Pending GPS requests awaiting a renderer gps:result. id -> {resolve,reject}
@@ -84,6 +87,20 @@ export async function createMainApp ({ pipe }) {
 
   // --- boot ------------------------------------------------------------------
   async function boot () {
+    const marker = await readAtRestMarker()
+    state.atRest = { enabled: marker.enabled, salt: marker.salt ? b4a.from(marker.salt, 'hex') : null, unlocked: false }
+    if (state.atRest.enabled) {
+      // The JSON stores are passphrase-encrypted. Defer loading until the user
+      // unlocks via passphrase:unlock; don't touch the encrypted files yet.
+      state.locked = true
+      return
+    }
+    await initialize()
+  }
+
+  // Load settings/identity, open the local core, start the swarm + scheduler,
+  // and join saved contacts. Called at boot (no encryption) or after unlock.
+  async function initialize () {
     state.settings = await loadSettings()
     state.identity = await loadOrCreateIdentity()
     try {
@@ -105,6 +122,8 @@ export async function createMainApp ({ pipe }) {
     // Join all saved contacts.
     const list = await contacts.listContacts()
     for (const c of list) await state.swarm.joinContact(c)
+    state.locked = false
+    state.atRest.unlocked = true
   }
 
   // --- swarm -----------------------------------------------------------------
@@ -217,18 +236,37 @@ export async function createMainApp ({ pipe }) {
     const snapped = snapCoords(lat, lng, state.settings.precisionKm || 0)
     const res = await appendCheckin(state.localCore, { lat: snapped.lat, lng: snapped.lng, timestamp, name }, state.identity.logKey)
     send({ type: 'self', lat: snapped.lat, lng: snapped.lng, timestamp, name })
-    if (res.shouldRotate) await rotateCore()
+    if (res.shouldRotate) await rotateCore(true) // rotate core AND log key (forward secrecy)
     return res
   }
 
-  async function rotateCore () {
+  // Current log key + the small windowed rotation history, as candidate keys for
+  // decrypting a core across a rotation boundary.
+  function localLogKeys () {
+    const keys = [state.identity.logKey]
+    for (const h of state.identity.logKeyHistory || []) keys.push(h.key)
+    return keys
+  }
+
+  // Rotate to a fresh local core generation. When `rotateLogKey` is set (on the
+  // normal MAX_ENTRIES rotation and the dev trigger) we ALSO rotate the user's
+  // symmetric log key and re-share it with live contacts, so a compromise
+  // exposes at most the recent window (forward secrecy).
+  async function rotateCore (rotateLogKey = false) {
     const old = state.localCore
-    state.settings.coreGeneration = (state.settings.coreGeneration || 0) + 1
+    const nextGen = (state.settings.coreGeneration || 0) + 1
+    if (rotateLogKey) {
+      state.identity = await rotateIdentityLogKey(state.identity, state.settings.coreGeneration || 0)
+    }
+    state.settings.coreGeneration = nextGen
     await saveSettings(state.settings)
     state.localCore = await openLocalCore(state.identity, state.settings.coreGeneration)
     if (old) old.close().catch(() => {})
     state.swarm.refreshHello() // re-share the new core key on the next handshake
     state.swarm.refreshLocalCore() // serve the new local core on existing conns
+    if (rotateLogKey && typeof state.swarm.refreshLogKey === 'function') {
+      state.swarm.refreshLogKey() // re-share the rotated log key on live conns
+    }
     send({ type: 'status', message: 'Log rotated after ' + MAX_ENTRIES + ' check-ins' })
   }
 
@@ -252,9 +290,13 @@ export async function createMainApp ({ pipe }) {
 
     try {
       if (msg.type === 'boot') {
+        if (state.locked) {
+          send({ type: 'boot', id: msg.id, locked: true, atrest: true })
+          return
+        }
         const raw = await contacts.listContacts()
         const list = await attachCachedPins(raw)
-        const latest = await readLatest(state.localCore, state.identity.logKey)
+        const latest = await readLatest(state.localCore, localLogKeys())
         send({
           type: 'boot',
           id: msg.id,
@@ -262,10 +304,68 @@ export async function createMainApp ({ pipe }) {
           intervalMs: state.settings.intervalMs,
           selfName: state.settings.selfName || '',
           precisionKm: state.settings.precisionKm || 0,
+          atrest: state.atRest.enabled,
           contacts: list.map(toRendererContact),
           selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null,
           manual: getManual()
         })
+        return
+      }
+
+      if (msg.type === 'passphrase:unlock') {
+        if (!state.atRest.enabled) throw new Error('Local encryption is not enabled')
+        const pass = String(msg.passphrase || '')
+        if (!pass) throw new Error('Enter your passphrase')
+        const key = deriveAtRestKey(pass, state.atRest.salt)
+        configureAtRest({ enabled: true, key })
+        try {
+          await initialize() // reads the encrypted stores; wrong passphrase throws
+        } catch (err) {
+          configureAtRest({ enabled: false, key: null })
+          send({ type: 'error', id: msg.id, message: 'Wrong passphrase' })
+          return
+        }
+        send({ type: 'passphrase:unlock', id: msg.id, ok: true })
+        return
+      }
+
+      if (msg.type === 'passphrase:set') {
+        // Enable at-rest encryption: derive a key, re-encrypt the existing JSON
+        // stores, and record the salt in the plaintext marker.
+        const pass = String(msg.passphrase || '')
+        if (pass.length < 8) throw new Error('Passphrase must be at least 8 characters')
+        const salt = generateSalt()
+        const key = deriveAtRestKey(pass, salt)
+        configureAtRest({ enabled: true, key })
+        await saveSettings(state.settings) // re-encrypt settings
+        await contacts.reEncrypt({ plaintextRead: true }) // read plaintext, write encrypted
+        await persistIdentity(state.identity) // re-encrypt identity (holds the log key)
+        await writeAtRestMarker({ enabled: true, salt: b4a.toString(salt, 'hex') })
+        state.atRest = { enabled: true, salt, unlocked: true }
+        send({ type: 'passphrase:set', id: msg.id, ok: true })
+        return
+      }
+
+      if (msg.type === 'passphrase:disable') {
+        if (!state.atRest.enabled) throw new Error('Local encryption is not enabled')
+        // Verify the passphrase, then decrypt the stores back to plaintext.
+        const pass = String(msg.passphrase || '')
+        const key = deriveAtRestKey(pass, state.atRest.salt)
+        configureAtRest({ enabled: true, key })
+        try {
+          state.identity = await loadOrCreateIdentity() // throws if passphrase is wrong
+        } catch (err) {
+          configureAtRest({ enabled: false, key: null })
+          send({ type: 'error', id: msg.id, message: 'Wrong passphrase' })
+          return
+        }
+        configureAtRest({ enabled: false, key: null })
+        await saveSettings(state.settings)
+        await contacts.reEncrypt({ plaintextWrite: true })
+        await persistIdentity(state.identity)
+        await writeAtRestMarker({ enabled: false, salt: null })
+        state.atRest = { enabled: false, salt: null, unlocked: true }
+        send({ type: 'passphrase:disable', id: msg.id, ok: true })
         return
       }
 
@@ -358,8 +458,16 @@ export async function createMainApp ({ pipe }) {
         for (let i = 0; i < MAX_ENTRIES + 1; i++) {
           await appendCheckin(state.localCore, { lat: 0, lng: 0, timestamp: Date.now() }, state.identity.logKey)
         }
-        await rotateCore()
+        await rotateCore(true)
         send({ type: 'dev:force200', id: msg.id })
+        return
+      }
+
+      if (msg.type === 'dev:rotate-logkey') {
+        // Rotate the log key + core on demand, so the forward-secrecy rotation
+        // can be exercised without waiting for MAX_ENTRIES check-ins.
+        await rotateCore(true)
+        send({ type: 'dev:rotate-logkey', id: msg.id })
         return
       }
     } catch (err) {

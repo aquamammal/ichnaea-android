@@ -48,6 +48,7 @@ export function createSwarmManager ({
   const byPubKey = new Map() // publicKeyB64 -> contactId
   const conns = new Map() // contactId -> verified conn
   const connToContact = new Map() // conn -> contactId (verified)
+  const connToEncPub = new Map() // conn -> peer's X25519 enc public key (base64)
   const connToChannel = new Map() // conn -> protomux message sender
   const verifiedConns = new Set() // conns that completed the handshake
   const servedCores = new Map() // protomux -> local core already served on it
@@ -89,6 +90,7 @@ export function createSwarmManager ({
     const drop = () => {
       verifiedConns.delete(conn)
       connToContact.delete(conn)
+      connToEncPub.delete(conn)
       connToChannel.delete(conn)
       servedCores.delete(mux)
       for (const [key, c] of conns) {
@@ -169,6 +171,9 @@ export function createSwarmManager ({
     verifiedConns.add(conn)
     conns.set(contactId, conn)
     connToContact.set(conn, contactId)
+    // Remember the peer's enc pub key so we can re-share a rotated log key on
+    // this live connection (not just the next reconnect).
+    if (msg.encPubKey) connToEncPub.set(conn, msg.encPubKey)
     // Once we know the peer's enc pub key, share our log key with them.
     if (msg.encPubKey) sendLogKey(conn, msg.encPubKey)
     emit()
@@ -233,10 +238,20 @@ export function createSwarmManager ({
     for (const conn of conns.values()) serveLocalCore(getMux(conn))
   }
 
+  // Re-seal and re-send our (possibly rotated) log key to all verified peers on
+  // live connections, so a rotated key reaches them without waiting for a
+  // reconnect. No-op for connections whose enc pub key we don't hold yet.
+  function refreshLogKey () {
+    for (const conn of conns.values()) {
+      const encPub = connToEncPub.get(conn)
+      if (encPub) sendLogKey(conn, encPub)
+    }
+  }
+
   async function close () {
     for (const cid of [...discoveries.keys()]) await leaveContact(cid)
     await swarm.destroy()
   }
 
-  return { joinContact, leaveContact, getConn, refreshHello, refreshLocalCore, close, state: () => ({ ...state }), swarm }
+  return { joinContact, leaveContact, getConn, refreshHello, refreshLocalCore, refreshLogKey, close, state: () => ({ ...state }), swarm }
 }

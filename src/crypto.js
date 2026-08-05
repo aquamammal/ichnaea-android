@@ -125,6 +125,59 @@ export function decrypt (cipherBuffer, logKey) {
   return plain
 }
 
+// --- At-rest passphrase encryption --------------------------------------------
+//
+// Opt-in passphrase protection for the on-disk JSON records (identity.json,
+// contacts.json, settings.json). The key is derived from the passphrase + a
+// random per-install salt. NOTE: Node 12 (NodeJS-Mobile) has no crypto.hkdf and
+// libsodium exposes BLAKE2b rather than a bare HMAC-SHA256, so we use a salted
+// BLAKE2b-256 generichash as the KDF (sound for this purpose; the AEAD below is
+// XSalsa20-Poly1305). Salt + nonce are stored alongside the data; the nonce is
+// embedded in the ciphertext by encrypt().
+
+// A random 16-byte salt for the at-rest KDF.
+export function generateSalt () {
+  return crypto.randomBytes(16)
+}
+
+// Derive a 32-byte at-rest key from a passphrase + salt (BLAKE2b-256 keyed by
+// the salt). Deterministic for the same (passphrase, salt).
+export function deriveAtRestKey (passphrase, salt) {
+  const out = b4a.alloc(32)
+  sodium.crypto_generichash(out, b4a.from(String(passphrase), 'utf8'), toBuf(salt))
+  return out
+}
+
+// Encrypt a JSON-serializable object with an at-rest key into a base64 string.
+// The on-disk envelope is `{ v: 1, salt, data }` where data is this base64.
+export function encryptJson (obj, key, salt) {
+  const plain = b4a.from(JSON.stringify(obj))
+  const cipher = encrypt(plain, key)
+  return {
+    v: 1,
+    salt: salt ? b4a.toString(toBuf(salt), 'hex') : null,
+    data: b4a.toString(cipher, 'base64')
+  }
+}
+
+// Decrypt an at-rest envelope object. Returns the parsed object, or null on a
+// bad/missing key (wrong passphrase or tampering).
+export function decryptJson (envelope, key) {
+  if (!envelope || typeof envelope.data !== 'string') return null
+  let plain
+  try {
+    plain = decrypt(b4a.from(envelope.data, 'base64'), key)
+  } catch {
+    return null
+  }
+  if (!plain) return null
+  try {
+    return JSON.parse(b4a.toString(plain))
+  } catch {
+    return null
+  }
+}
+
 // --- helpers ----------------------------------------------------------------
 
 function toBuf (key) {

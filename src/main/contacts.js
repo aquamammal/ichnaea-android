@@ -1,6 +1,6 @@
 import b4a from 'b4a'
 import { pubFromB64, pubToB64 } from '../crypto.js'
-import { dataDir, readJson, writeJson, resolveFs } from './fsx.js'
+import { dataDir, readJson, readJsonPlain, writeJson, writeJsonPlain, resolveFs } from './fsx.js'
 
 // Contacts store for the MAIN process, persisted as a JSON file on the
 // filesystem (the renderer's IndexedDB contacts store is replaced by pipe calls
@@ -23,6 +23,26 @@ async function load () {
 
 async function save (contacts) {
   await writeJson(await storeFile(), { version: 1, contacts })
+}
+
+// Re-write the store, used when at-rest encryption is enabled/disabled.
+//   plaintextRead  = true  -> the file on disk is currently plaintext (enable)
+//   plaintextWrite = true  -> write the result as plaintext (disable)
+export async function reEncrypt ({ plaintextRead = false, plaintextWrite = false } = {}) {
+  return serialized(async () => {
+    const file = await storeFile()
+    let data
+    if (plaintextRead) {
+      const raw = await readJsonPlain(file)
+      data = raw && typeof raw === 'object' && raw.contacts ? raw.contacts : {}
+    } else {
+      data = await load()
+    }
+    const out = { version: 1, contacts: data }
+    if (plaintextWrite) await writeJsonPlain(file, out)
+    else await writeJson(file, out)
+    return true
+  })
 }
 
 function keyId (publicKeyBuf) {

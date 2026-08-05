@@ -45,13 +45,20 @@ export async function appendCheckin (core, { lat, lng, timestamp, name }, logKey
 }
 
 // Read + decode the latest entry from any core (local or replicated). Tries the
-// given `logKey` first; if it fails (auth error or legacy plaintext block), falls
-// back to treating the block as plaintext so old logs stay readable.
-// Returns null for an empty, missing, or not-yet-open core.
+// given key(s) first (a single key or an array — the array lets callers pass the
+// current log key plus the small windowed rotation history); if all fail (auth
+// error or legacy plaintext block), falls back to treating the block as
+// plaintext so old logs stay readable. Returns null for an empty, missing, or
+// not-yet-open core.
 export async function readLatest (core, logKey) {
   if (!core || !core.length) return null
   const block = await core.get(core.length - 1)
-  let plain = decrypt(block, logKey)
+  const keys = Array.isArray(logKey) ? logKey : (logKey ? [logKey] : [])
+  let plain = null
+  for (const k of keys) {
+    const p = decrypt(block, k)
+    if (p) { plain = p; break }
+  }
   if (!plain) plain = block // legacy plaintext fallback
   try {
     return JSON.parse(b4a.toString(plain))
