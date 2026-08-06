@@ -152,8 +152,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.2-debug.apk
-- SHA-256: `afc963576895523aa094789e61f8bf52c7adcea0c1efe8e4f78bb6b8aced6099`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.3-debug.apk
+- SHA-256: `a05e5b52e09b8ce5747908bdba6e5173b76e5dbc0ce20b9fc95943df407bd2e6`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -162,8 +162,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.2-debug.apk
-> sha256sum dist/ichnaea-android-v0.3.2-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.3-debug.apk
+> sha256sum dist/ichnaea-android-v0.3.3-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -176,7 +176,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.3.2 dist/ichnaea-android-v0.3.2-debug.apk --title "Ichnaea Android v0.3.2"
+> gh release create v0.3.3 dist/ichnaea-android-v0.3.3-debug.apk --title "Ichnaea Android v0.3.3"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the
