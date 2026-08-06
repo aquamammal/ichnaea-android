@@ -1207,6 +1207,15 @@ async function loadState () {
   state.precisionKm = typeof res.precisionKm === 'number' ? res.precisionKm : 0
   if (els.setPrecision) els.setPrecision.value = String(state.precisionKm)
   if (res.selfLoc) state.globe.setSelf(res.selfLoc)
+  // Restore each contact's cached pin at boot (green/yellow/red by staleness),
+  // so arcs show for every contact with coords even before any live update.
+  for (const c of state.contacts) {
+    if (typeof c.lat === 'number' && typeof c.lng === 'number') {
+      const status = classify(c.lastSeenTs, c.intervalMs)
+      const pinStatus = status === STATUS.STALE ? 'stale' : status === STATUS.OFFLINE ? 'offline' : 'active'
+      state.globe.upsertContactPin(c, { lat: c.lat, lng: c.lng }, pinStatus)
+    }
+  }
   renderContactsList()
 }
 
