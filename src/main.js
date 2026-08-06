@@ -32,11 +32,11 @@ const els = {
   modalUnlock: $('modal-unlock'), unlockPass: $('unlock-passphrase'), unlockErr: $('unlock-error'), unlockConfirm: $('unlock-confirm'),
   modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
   modalBroadcastNudge: $('modal-broadcast-nudge'), broadcastNudgeNow: $('broadcast-nudge-now'), broadcastNudgeLater: $('broadcast-nudge-later'),
-  modalManualCheckin: $('modal-manual-checkin'), manualCheckinLat: $('manual-checkin-lat'), manualCheckinLng: $('manual-checkin-lng'),   manualCheckinErr: $('manual-checkin-error'), manualCheckinOk: $('manual-checkin-ok'), manualCheckinCancel: $('manual-checkin-cancel'), manualCheckinClose: $('manual-checkin-close'),
+  modalManualCheckin: $('modal-manual-checkin'), manualCheckinLat: $('manual-checkin-lat'), manualCheckinLng: $('manual-checkin-lng'), manualCheckinErr: $('manual-checkin-error'), manualCheckinOk: $('manual-checkin-ok'), manualCheckinCancel: $('manual-checkin-cancel'), manualCheckinClose: $('manual-checkin-close'),
+  modalBroadcastChoice: $('modal-broadcast-choice'), broadcastChoiceGps: $('broadcast-choice-gps'), broadcastChoiceManual: $('broadcast-choice-manual'), broadcastChoiceErr: $('broadcast-choice-error'),
   citySearch: $('city-search'), cityResults: $('city-results'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
   quietNotify: $('quiet-notify'),
-  manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
   pinScale: $('set-pinsize'), pinsizeVal: $('pinsize-val'),
   pinOverlay: $('pin-overlay'), pinName: $('pin-name'), pinTime: $('pin-time'), pinAgo: $('pin-ago'), pinStatus: $('pin-status'), pinCoords: $('pin-coords'), pinFingerprint: $('pin-fingerprint'),
   toast: $('toast'), devPanel: $('dev-panel'), devStatus: $('dev-status'), versionTag: $('version-tag')
@@ -107,7 +107,6 @@ const state = {
   globe: null,
   intervalMs: DEFAULT_INTERVAL_MS,
   contacts: [],
-  manual: { enabled: false, lat: null, lng: null },
   pinScale: 1,
   colored: getColored(),
   arcs: getArcs(),
@@ -273,10 +272,6 @@ function handlePush (msg) {
 }
 
 function statusSuffix (msg) {
-  const m = state.manual
-  if (m && m.enabled && typeof m.lat === 'number' && typeof m.lng === 'number') {
-    return `${msg} \u00b7 manual: ${round(m.lat)},${round(m.lng)}`
-  }
   return msg
 }
 function round (n) { return Math.round(n * 10000) / 10000 }
@@ -591,7 +586,6 @@ function initUI () {
     if (els.setPrecision) els.setPrecision.value = String(state.precisionKm)
     if (els.quietNotify) els.quietNotify.checked = getQuietNotify()
     syncEncryptUI()
-    syncManualUI()
     openModal(els.modalSet)
   })
   $('add-cancel').addEventListener('click', () => closeModal(els.modalAdd))
@@ -599,6 +593,10 @@ function initUI () {
   $('add-confirm').addEventListener('click', onAddContact)
   $('set-confirm').addEventListener('click', onSaveSettings)
   $('btn-checkin-now').addEventListener('click', onCheckinNow)
+  if (els.broadcastChoiceGps) {
+    els.broadcastChoiceGps.addEventListener('click', onBroadcastGps)
+    els.broadcastChoiceManual.addEventListener('click', onBroadcastManual)
+  }
   if (els.btnCheckUpdates) {
     els.btnCheckUpdates.addEventListener('click', onCheckUpdates)
   }
@@ -672,9 +670,6 @@ function initUI () {
     if (isFinite(ps) && ps > 0) { state.pinScale = ps; els.pinScale.value = String(ps); els.pinsizeVal.textContent = ps.toFixed(1) + '×' }
   } catch { /* ignore */ }
   if (state.globe && typeof state.globe.setPinScale === 'function') state.globe.setPinScale(state.pinScale)
-
-  $('btn-manual-checkin').addEventListener('click', onManualCheckin)
-  els.manualEnabled.addEventListener('change', onManualToggle)
 
   els.myPubkey.addEventListener('click', async () => {
     try {
@@ -750,21 +745,6 @@ async function openQrModal () {
   } catch (err) {
     toast('QR failed: ' + String(err && err.message || err))
   }
-}
-
-function syncManualUI () {
-  const m = state.manual || {}
-  els.manualEnabled.checked = Boolean(m.enabled)
-  if (typeof m.lat === 'number') els.manualLat.value = String(m.lat)
-  if (typeof m.lng === 'number') els.manualLng.value = String(m.lng)
-}
-
-function readManualInputs () {
-  const lat = parseFloat(els.manualLat.value)
-  const lng = parseFloat(els.manualLng.value)
-  if (!isFinite(lat) || lat < -90 || lat > 90) throw new Error('Latitude must be \u221290..90')
-  if (!isFinite(lng) || lng < -180 || lng > 180) throw new Error('Longitude must be \u2212180..180')
-  return { lat, lng }
 }
 
 // Live safety-number preview under the Add Contact key field, so the user can
@@ -1010,7 +990,6 @@ async function onSaveSettings () {
   const ms = freqFromDropdowns()
   if (!ms || ms <= 0) { els.setErr.textContent = 'Pick a valid interval'; return }
   try {
-    await saveManual()
     if (els.setSelfName) {
       const name = String(els.setSelfName.value || '').trim().slice(0, 40)
       const res = await request('selfname:set', { name })
@@ -1038,32 +1017,37 @@ async function onSaveSettings () {
   }
 }
 
-async function onCheckinNow () {
+// "Broadcast coordinates" now asks how to get a fix: GPS, or manual entry /
+// city search. Manual entry lives here (not in Settings).
+function onCheckinNow () {
+  if (els.broadcastChoiceErr) els.broadcastChoiceErr.textContent = ''
+  openModal(els.modalBroadcastChoice)
+}
+
+// Choice: "Use GPS" — get a fix and broadcast; if there's no GPS, fall through
+// to the manual modal.
+async function onBroadcastGps () {
+  closeModal(els.modalBroadcastChoice)
   setGpsStatus(statusSuffix('requesting\u2026'))
-  // If a manual override is enabled, use the scheduler path (it uses the stored
-  // coords and never touches GPS).
-  if (state.manual && state.manual.enabled) {
-    try {
-      await request('checkin:now')
-      return
-    } catch (err) {
-      setGpsStatus(statusSuffix('unavailable'))
-      return
-    }
-  }
-  // Otherwise try GPS directly so that on failure we can prompt for manual
-  // coordinates instead of silently giving up.
   try {
     const { lat, lng } = await getPositionOnce()
     await request('checkin:manual', { lat, lng })
     setGpsStatus(statusSuffix('checked in'))
   } catch (err) {
-    setGpsStatus(statusSuffix('no GPS \u2014 enter coordinates'))
-    toast('No GPS fix \u2014 enter coordinates to broadcast')
+    setGpsStatus(statusSuffix('no GPS \u2014 use manual'))
+    toast('No GPS available \u2014 use manual')
     openModal(els.modalManualCheckin)
     els.manualCheckinErr.textContent = ''
     if (els.citySearch) { els.citySearch.value = ''; els.cityResults.innerHTML = '' }
   }
+}
+
+// Choice: "Manual" — open the manual-coordinates / city-search modal.
+function onBroadcastManual () {
+  closeModal(els.modalBroadcastChoice)
+  openModal(els.modalManualCheckin)
+  els.manualCheckinErr.textContent = ''
+  if (els.citySearch) { els.citySearch.value = ''; els.cityResults.innerHTML = '' }
 }
 
 // Search the bundled city dataset and render matches; picking one fills the
@@ -1121,44 +1105,6 @@ async function onManualPromptCheckin () {
   } catch (err) {
     els.manualCheckinErr.textContent = String(err.message || err)
   }
-}
-
-async function onManualCheckin () {
-  els.setErr.textContent = ''
-  try {
-    const { lat, lng } = readManualInputs()
-    state.manual = { ...state.manual, lat, lng }
-    if (state.globe && typeof state.globe.setSelf === 'function') {
-      state.globe.setSelf({ lat, lng })
-    }
-    await request('checkin:manual', { lat, lng })
-    toast(`Checked in at ${round(lat)},${round(lng)}`)
-  } catch (err) {
-    els.setErr.textContent = String(err.message || err)
-  }
-}
-
-async function onManualToggle () {
-  try {
-    await saveManual()
-    toast(els.manualEnabled.checked ? 'Manual location enabled' : 'Manual location disabled')
-  } catch (err) {
-    els.setErr.textContent = String(err.message || err)
-    els.manualEnabled.checked = Boolean(state.manual && state.manual.enabled)
-  }
-}
-
-async function saveManual () {
-  let lat = state.manual ? state.manual.lat : null
-  let lng = state.manual ? state.manual.lng : null
-  if (els.manualLat.value !== '' && els.manualLng.value !== '') {
-    const c = readManualInputs()
-    lat = c.lat; lng = c.lng
-  }
-  const enabled = els.manualEnabled.checked
-  const res = await request('manual:set', { enabled, lat, lng })
-  state.manual = res.manual
-  setGpsStatus(statusSuffix(els.gpsStatus.textContent.replace(/^Location: /, '').split(' \u00b7 manual:')[0]))
 }
 
 async function onForce200 () {
@@ -1255,7 +1201,6 @@ async function loadState () {
   els.setFreqMin.value = String(fv)
   els.setFreqUnit.value = fu
   syncFreqDisplay()
-  state.manual = res.manual || { enabled: false, lat: null, lng: null }
   state.contacts = res.contacts || []
   seedUnread(state.contacts)
   state.selfName = res.selfName || ''

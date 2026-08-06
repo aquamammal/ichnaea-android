@@ -120,6 +120,8 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **City search (no-GPS fallback)** — when **Broadcast coordinates** finds no GPS fix, the prompt has a **city search**: type a city name and it fills in the coordinates (bundled GeoNames cities5000 dataset, ~68k cities, searched locally — zero telemetry). Manual lat/lng entry still works.
 
+**Broadcast choice** — tapping **Broadcast coordinates** now asks **Use GPS** or **Manual**: Use GPS broadcasts a normal fix (and falls back to Manual if there's no GPS); Manual opens the city-search / coordinates prompt. The old Settings "Manual location" section is gone.
+
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
 
 **Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists. When one is available it shows an **Update now** button that downloads the new APK **in the app** and hands it to the Android package installer (via the native `IchnaeaUpdater` plugin), so you can update without leaving Ichnaea. It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry). On the first in-app update Android 8+ will ask you to allow Ichnaea to "Install unknown apps" — enable it, then tap Update again.
@@ -150,8 +152,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.1-debug.apk
-- SHA-256: `c9db1b672c790bc8867de4c0dabf1736590729fd65ad8fd4101968ab1c786d80`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.2-debug.apk
+- SHA-256: `afc963576895523aa094789e61f8bf52c7adcea0c1efe8e4f78bb6b8aced6099`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -160,8 +162,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.1-debug.apk
-> sha256sum dist/ichnaea-android-v0.3.1-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.2-debug.apk
+> sha256sum dist/ichnaea-android-v0.3.2-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -174,7 +176,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.3.1 dist/ichnaea-android-v0.3.1-debug.apk --title "Ichnaea Android v0.3.1"
+> gh release create v0.3.2 dist/ichnaea-android-v0.3.2-debug.apk --title "Ichnaea Android v0.3.2"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the
@@ -238,7 +240,7 @@ Two ways to exchange public keys:
 
 - A **persistent notification** ("Running P2P check-in service") keeps the P2P stack alive — don't swipe it away.
 - A **battery optimization** prompt appears on first launch — accept it so Doze doesn't freeze the P2P service.
-- First run asks for **location permission** — needed for GPS check-ins (or use **Settings → Manual location**).
+- First run asks for **location permission** — needed for GPS check-ins (or tap **Broadcast coordinates → Manual** to enter coordinates / search a city).
 - **Camera permission** is asked the first time you use **Add Contact → Scan QR code** — only used for scanning a friend's QR on-device; the stream never leaves the phone.
 
 ## Verified: live E2E encrypted sync (phone <-> desktop)

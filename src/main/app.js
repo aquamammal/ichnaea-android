@@ -82,10 +82,6 @@ export async function createMainApp ({ pipe }) {
     })
   }
 
-  function getManual () {
-    return (state.settings && state.settings.manual) || { enabled: false, lat: null, lng: null }
-  }
-
   // --- boot ------------------------------------------------------------------
   async function boot () {
     const marker = await readAtRestMarker()
@@ -239,7 +235,6 @@ export async function createMainApp ({ pipe }) {
   function initScheduler () {
     state.scheduler = createMainScheduler({
       requestGps,
-      getManual,
       onCheckin: async ({ lat, lng, timestamp }) => {
         await doCheckin({ lat, lng, timestamp })
       },
@@ -337,8 +332,7 @@ export async function createMainApp ({ pipe }) {
           atrest: state.atRest.enabled,
           pendingCount: await pending.count(),
           contacts: list.map(toRendererContact),
-          selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null,
-          manual: getManual()
+          selfLoc: latest ? { lat: latest.lat, lng: latest.lng } : null
         })
         return
       }
@@ -474,7 +468,7 @@ export async function createMainApp ({ pipe }) {
       }
 
       if (msg.type === 'checkin:now') {
-        // Immediate check-in via the normal GPS path (manual override applies).
+        // Immediate check-in via the normal GPS path.
         state.scheduler.checkinNow().catch(() => {})
         send({ type: 'checkin:now', id: msg.id })
         return
@@ -488,20 +482,6 @@ export async function createMainApp ({ pipe }) {
         send({ type: 'checkin:manual', id: msg.id, lat, lng })
         return
       }
-
-      if (msg.type === 'manual:set') {
-        // Persist the manual override (coords + enabled flag).
-        const manual = {
-          enabled: Boolean(msg.enabled),
-          lat: typeof msg.lat === 'number' ? msg.lat : null,
-          lng: typeof msg.lng === 'number' ? msg.lng : null
-        }
-        state.settings.manual = manual
-        await saveSettings(state.settings)
-        send({ type: 'manual:set', id: msg.id, manual })
-        return
-      }
-
       if (msg.type === 'dev:force200') {
         for (let i = 0; i < MAX_ENTRIES + 1; i++) {
           await appendCheckin(state.localCore, { lat: 0, lng: 0, timestamp: Date.now() }, state.identity.logKey)
