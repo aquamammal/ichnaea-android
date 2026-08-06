@@ -148,8 +148,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.11-debug.apk
-- SHA-256: `d49e1f4afeab83850ad9ceecfaee911bdee69a089c7f23c1b5a71934cb593b76`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.12-debug.apk
+- SHA-256: `a2db62db21e903253fabc72475a1fc05bf4e0bb725b534bf32495e0786654b9e`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -158,8 +158,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.11-debug.apk
-> sha256sum dist/ichnaea-android-v0.2.11-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.12-debug.apk
+> sha256sum dist/ichnaea-android-v0.2.12-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -172,7 +172,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.2.11 dist/ichnaea-android-v0.2.11-debug.apk --title "Ichnaea Android v0.2.11"
+> gh release create v0.2.12 dist/ichnaea-android-v0.2.12-debug.apk --title "Ichnaea Android v0.2.12"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the
@@ -186,8 +186,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > - Re-add `<uses-permission android:name="android.permission.CAMERA" />` (QR scanning).
 > - Re-add `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />` (in-app update install).
-> - Re-add the `IchnaeaUpdaterPlugin.java` class and register it in `MainActivity` (`registerPlugin(IchnaeaUpdaterPlugin.class)` in `onCreate`) — powers in-app APK download/install. It relies on the existing `FileProvider` (`${applicationId}.fileprovider`) + `res/xml/file_paths.xml` `cache-path`, which Capacitor's generated manifest already includes.
-> - Re-add the `IchnaeaNotifyPlugin.java` class and its `registerPlugin(IchnaeaNotifyPlugin.class)` line — posts local "went quiet" notifications. The `POST_NOTIFICATIONS` permission is already in the manifest.
+> - Re-add `IchnaeaUpdaterPlugin.java` + `IchnaeaNotifyPlugin.java` classes. They are auto-discovered via `android/app/src/main/assets/capacitor.plugins.json`, which `cap sync` regenerates — so `scripts/plugins.mjs` re-appends them to that file automatically during `npm run build:apk` (no manual `registerPlugin` in `MainActivity`). `IchnaeaUpdater` relies on the existing `FileProvider` (`${applicationId}.fileprovider`) + `res/xml/file_paths.xml` `cache-path` (already in the generated manifest); `IchnaeaNotify` uses the `POST_NOTIFICATIONS` permission (already in the manifest).
 > - Re-apply any other `android/` customizations from `scripts/native-assets.mjs` notes (e.g. `NodeService.java`, the `CAMERA`/`POST_NOTIFICATIONS` permissions, the JNI bridge).
 
 Or build it yourself from this repo:
