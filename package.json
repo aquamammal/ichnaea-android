@@ -1,6 +1,6 @@
 {
   "name": "ichnaea-android",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Ichnaea Android port — P2P privacy-first location check-ins with E2E encryption",
   "type": "module",
   "license": "Apache-2.0",
