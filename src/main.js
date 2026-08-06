@@ -286,10 +286,12 @@ function upsertContact (contact) {
   else state.contacts.push(contact)
 
   const status = classify(contact.lastSeenTs, contact.intervalMs)
-  if (status === STATUS.OFFLINE) {
-    state.globe.removeContactPin(contact.id)
-  } else if (typeof contact.lat === 'number' && typeof contact.lng === 'number') {
-    state.globe.upsertContactPin(contact, { lat: contact.lat, lng: contact.lng }, status === STATUS.STALE ? 'stale' : 'active')
+  // Keep the pin at every staleness stage (green -> yellow -> red) so the last
+  // known position stays visible as it ages; only never-broadcast contacts have
+  // no pin.
+  if (typeof contact.lat === 'number' && typeof contact.lng === 'number') {
+    const pinStatus = status === STATUS.STALE ? 'stale' : status === STATUS.OFFLINE ? 'offline' : 'active'
+    state.globe.upsertContactPin(contact, { lat: contact.lat, lng: contact.lng }, pinStatus)
   }
   renderContactsList()
 }
@@ -305,10 +307,13 @@ function startStalenessSweep () {
         notifyQuiet(c)
       }
       quietNotified.set(c.id, status)
-      if (status === STATUS.OFFLINE && state.globe.hasPin(c.id)) {
-        state.globe.removeContactPin(c.id)
-      } else if (status === STATUS.STALE && state.globe.hasPin(c.id) && typeof c.lat === 'number' && typeof c.lng === 'number') {
-        state.globe.upsertContactPin(c, { lat: c.lat, lng: c.lng }, 'stale')
+      // Age the pin's color as a contact goes stale/offline (green -> yellow ->
+      // red) instead of removing it, so the last known position stays visible.
+      const hasCoords = typeof c.lat === 'number' && typeof c.lng === 'number'
+      if (hasCoords && state.globe.hasPin(c.id)) {
+        if (status === STATUS.OFFLINE) state.globe.upsertContactPin(c, { lat: c.lat, lng: c.lng }, 'offline')
+        else if (status === STATUS.STALE) state.globe.upsertContactPin(c, { lat: c.lat, lng: c.lng }, 'stale')
+        else if (status === STATUS.ACTIVE) state.globe.upsertContactPin(c, { lat: c.lat, lng: c.lng }, 'active')
       }
     }
     renderContactsList()
@@ -435,7 +440,7 @@ function renderContactsList () {
     item.className = 'contact-item'
     const status = classify(c.lastSeenTs, c.intervalMs)
     const dot = document.createElement('span')
-    dot.className = 'dot' + (status === STATUS.ACTIVE ? ' on' : '')
+    dot.className = 'dot on' + (status === STATUS.STALE ? '-stale' : status === STATUS.OFFLINE ? '-offline' : '')
     const name = document.createElement('span')
     name.className = 'name'
     // Local nickname takes priority; the peer's self-chosen name is a hint.

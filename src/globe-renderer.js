@@ -16,15 +16,17 @@ import { countryColors } from './country-colors.js'
 //
 //   self pin     -> blue
 //   active       -> green
-//   stale        -> gray
-//   (offline pins are removed by the caller, not rendered)
+//   stale        -> yellow
+//   offline      -> red (pin is KEPT and tinted red — not removed, so the last
+//                   known position stays visible as it ages)
 //
 // Zero telemetry: the 3D earth texture and the world outline are bundled
 // locally under src/assets/ — no CDN, no map-tile servers.
 
 const COLOR_SELF = '#3b9dff'
 const COLOR_ACTIVE = '#3ddc84'
-const COLOR_STALE = '#9aa4b0'
+const COLOR_STALE = '#ffd54a'
+const COLOR_OFFLINE = '#ff5252'
 
 function webglAvailable () {
   try {
@@ -64,11 +66,13 @@ function teardropGeometry () {
 
 // Stable per-contact color (hue hashed from the contact id) so each contact
 // keeps its own color across sessions. `dim` produces a faded variant for stale pins.
-function contactColor (id, dim) {
-  let h = 2165387
-  for (let i = 0; i < id.length; i++) h = ((h * 31) + id.charCodeAt(i)) >>> 0
-  const hue = h % 360
-  return dim ? `hsla(${hue}, 60%, 45%, 0.5)` : `hsl(${hue}, 75%, 62%)`
+// Contact pin color by staleness status: fresh = green, stale = yellow,
+// offline (old) = red. Arcs reuse the pin color, so the connecting lines carry
+// the same status signal.
+function contactColor (status) {
+  if (status === 'offline') return COLOR_OFFLINE
+  if (status === 'stale') return COLOR_STALE
+  return COLOR_ACTIVE
 }
 
 // Pre-build feature -> index lookups once (features are stable module data).
@@ -293,10 +297,10 @@ export function createGlobeRenderer (container, { onPinClick, style, colored, sh
   }
 
   // contact: { id, nickname, lastSeenTs, intervalMs }
-  // loc: { lat, lng }  status: 'active' | 'stale'
+  // loc: { lat, lng }  status: 'active' | 'stale' | 'offline'
   function upsertContactPin (contact, loc, status) {
     if (!loc || !isFinite(loc.lat) || !isFinite(loc.lng)) return // no coords yet
-    const color = String(contactColor(contact.id, status === 'stale'))
+    const color = String(contactColor(status))
     pins.set(contact.id, {
       id: contact.id, lat: loc.lat, lng: loc.lng, alt: 0.025 * pinScale, color, baseSize: 0.42, baseAlt: 0.025,
       size: 0.42 * pinScale, data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }

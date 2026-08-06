@@ -70,6 +70,8 @@
       .status-line { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
       .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gray); flex: none; }
       .dot.on { background: var(--green); }
+      .dot.on-stale { background: var(--yellow, #ffd54a); }
+      .dot.on-offline { background: var(--red, #ff5252); }
 
       .pubkey {
         font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -167,7 +169,7 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2 id="beacon-title">Ichnaea Ver. 0.2.14</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.2.15</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
@@ -387,8 +389,8 @@
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.2.14</div>
+    <div id="version-tag">ichnaea-android v0.2.15</div>
 
-    <script type="module" src="./main.bundle.js?v=1785996708814"></script>
+    <script type="module" src="./main.bundle.js?v=1785998508647"></script>
   </body>
 </html>

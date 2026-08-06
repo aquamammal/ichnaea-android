@@ -12,8 +12,9 @@
 //
 //   self pin     -> blue
 //   active       -> green
-//   stale        -> gray
-//   (offline pins are removed by the caller, not rendered)
+//   stale        -> yellow
+//   offline      -> red (pin is KEPT and tinted red — not removed, so the last
+//                   known position stays visible as it ages)
 
 import WORLD from './assets/world.js'
 import { geoEquirectangular, geoPath, geoGraticule10 } from 'd3-geo'
@@ -22,7 +23,8 @@ import { countryColors } from './country-colors.js'
 
 const COLOR_SELF = '#3b9dff'
 const COLOR_ACTIVE = '#3ddc84'
-const COLOR_STALE = '#9aa4b0'
+const COLOR_STALE = '#ffd54a'
+const COLOR_OFFLINE = '#ff5252'
 
 const COLOR_OCEAN = '#0a0e14'
 const COLOR_LAND = '#1d2735'
@@ -35,11 +37,13 @@ const COUNTRY_FILLS = countryColors(WORLD.features)
 
 const HIT_RADIUS_PX = 10
 
-function contactColor (id, dim) {
-  let h = 2165387
-  for (let i = 0; i < id.length; i++) h = ((h * 31) + id.charCodeAt(i)) >>> 0
-  const hue = h % 360
-  return dim ? `hsla(${hue}, 60%, 45%, 0.55)` : `hsl(${hue}, 75%, 58%)`
+// Contact pin color by staleness status: fresh = green, stale = yellow,
+// offline (old) = red. Arcs reuse the pin color, so the connecting lines carry
+// the same status signal.
+function contactColor (status) {
+  if (status === 'offline') return COLOR_OFFLINE
+  if (status === 'stale') return COLOR_STALE
+  return COLOR_ACTIVE
 }
 
 // Build the d3 projection for a given 2D style id. `center` ({lat,lng}) is used
@@ -405,10 +409,10 @@ export function create2DRenderer (container, { onPinClick, style, colored, showA
   }
 
   // contact: { id, nickname, lastSeenTs, intervalMs }
-  // loc: { lat, lng }  status: 'active' | 'stale'
+  // loc: { lat, lng }  status: 'active' | 'stale' | 'offline'
   function upsertContactPin (contact, loc, status) {
     if (!loc || !isFinite(loc.lat) || !isFinite(loc.lng)) return // no coords yet
-    const color = String(contactColor(contact.id, status === 'stale'))
+    const color = String(contactColor(status))
     pins.set(contact.id, {
       id: contact.id, lat: loc.lat, lng: loc.lng, color,
       data: { self: false, contact, lat: loc.lat, lng: loc.lng, status }
