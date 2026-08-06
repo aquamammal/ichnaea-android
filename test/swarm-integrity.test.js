@@ -18,7 +18,8 @@ const REQUIRED = [
   'const conns = new Map()',
   'const connToEncPub = new Map()',
   'const verifiedConns = new Set()',
-  'export function createSwarmManager'
+  'export function createSwarmManager',
+  'function sendCheckinRequest (contactId)'
 ]
 
 test('swarm.js top-level declarations are intact (not swallowed by comments)', (t) => {

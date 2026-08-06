@@ -9,6 +9,7 @@ import { createMainScheduler } from './scheduler.js'
 import { snapCoords, PRECISION_KM_OPTIONS } from './precision.js'
 import { configureAtRest, readAtRestMarker, writeAtRestMarker } from './fsx.js'
 import * as pending from './pending.js'
+import { shouldHonorCheckinRequest, canSendCheckinRequest } from './checkin-request.js'
 
 // Main-process P2P orchestrator. Owns the entire P2P stack (identity, local
 // Hypercore on the filesystem, Hyperswarm, contact-core replication, and the
@@ -66,6 +67,9 @@ export async function createMainApp ({ pipe }) {
   // Pending GPS requests awaiting a renderer gps:result. id -> {resolve,reject}
   const pendingGps = new Map()
   let gpsSeq = 0
+  // "Ask them to check in" rate-limit bookkeeping (in-memory, not persisted).
+  const honoredRequests = new Map() // contactId -> last honored inbound request ts
+  const sentRequests = new Map() // contactId -> last outbound request ts
 
   // Ask the renderer for a GPS fix. Rejects if the renderer reports an error or
   // never answers (timeout) — the scheduler treats that as a failed fix.
@@ -170,6 +174,21 @@ export async function createMainApp ({ pipe }) {
       },
       onPeerLeft: (contactId) => {
         stopContactReplication(contactId)
+      },
+      onCheckinRequest: (contactId) => {
+        // A verified contact asked us to check in. Honor it ONLY if the user has
+        // opted in ("Honor location requests from contacts", default OFF) and we
+        // haven't honored this contact recently. If not honored, stay silent —
+        // never even reply, so the requester can't tell we received the ask.
+        const now = Date.now()
+        const { ok, reason } = shouldHonorCheckinRequest({
+          honor: state.settings.honorLocationRequests,
+          lastTs: honoredRequests.get(contactId),
+          now
+        })
+        if (!ok) return
+        honoredRequests.set(contactId, now)
+        state.scheduler.checkinNow().catch(() => { /* GPS failed — nothing to send */ })
       }
     })
   }
@@ -329,6 +348,7 @@ export async function createMainApp ({ pipe }) {
           intervalMs: state.settings.intervalMs,
           selfName: state.settings.selfName || '',
           precisionKm: state.settings.precisionKm || 0,
+          honorLocationRequests: state.settings.honorLocationRequests === true,
           atrest: state.atRest.enabled,
           pendingCount: await pending.count(),
           contacts: list.map(toRendererContact),
@@ -481,6 +501,34 @@ export async function createMainApp ({ pipe }) {
         await doCheckin({ lat, lng, timestamp: Date.now() })
         send({ type: 'checkin:manual', id: msg.id, lat, lng })
         return
+      }
+
+      if (msg.type === 'checkin:request') {
+        // "Ask them to check in": send an opt-in location request to a contact.
+        const contactId = String(msg.contactId || '')
+        const contact = await contacts.getContact(contactId)
+        if (!contact) throw new Error('Contact not found')
+        const now = Date.now()
+        const { ok, reason } = canSendCheckinRequest({ lastTs: sentRequests.get(contactId), now })
+        if (!ok) {
+          send({ type: 'checkin:request', id: msg.id, sent: false, reason: 'rate-limited' })
+          return
+        }
+        const sent = state.swarm.sendCheckinRequest(contactId)
+        if (sent) sentRequests.set(contactId, now)
+        send({ type: 'checkin:request', id: msg.id, sent, reason: sent ? null : 'offline' })
+        return
+      }
+
+      if (msg.type === 'settings:set') {
+        const key = String(msg.key || '')
+        if (key === 'honorLocationRequests') {
+          state.settings.honorLocationRequests = Boolean(msg.value)
+          await saveSettings(state.settings)
+          send({ type: 'settings:set', id: msg.id, ok: true, key })
+          return
+        }
+        throw new Error('Unknown setting: ' + key)
       }
       if (msg.type === 'dev:force200') {
         for (let i = 0; i < MAX_ENTRIES + 1; i++) {

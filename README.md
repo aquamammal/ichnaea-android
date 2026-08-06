@@ -118,6 +118,8 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Quiet-contact notifications** — when a contact goes stale/offline, a **local-only** notification says "X went quiet — last check-in …" (no coordinates, nothing sent). Toggle it in **Settings → Notify when a contact goes quiet** (default on).
 
+**"Ask them to check in" (opt-in location request)** — each contact row has an **Ask** button that asks that contact to broadcast a check-in. It only reaches them over an **active, verified connection** (they're offline → the UI says so). They only honor it if they've turned on **Settings → "Honor location requests from contacts"** (default **OFF**); when off, your ask is **silently ignored** (they never even reply). Asks are **rate-limited to 5 min per contact** both ways, and a honored ask triggers the contact's normal scheduled-style check-in. Deliberately not a "force": honoring is always the receiver's choice.
+
 **City search (no-GPS fallback)** — when **Broadcast coordinates** finds no GPS fix, the prompt has a **city search**: type a city name and it fills in the coordinates (bundled GeoNames cities5000 dataset, ~68k cities, searched locally — zero telemetry). Manual lat/lng entry still works.
 
 **Broadcast choice** — tapping **Broadcast coordinates** now asks **Use GPS** or **Manual**: Use GPS broadcasts a normal fix (and falls back to Manual if there's no GPS); Manual opens the city-search / coordinates prompt. The old Settings "Manual location" section is gone.
@@ -152,8 +154,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.3-debug.apk
-- SHA-256: `a05e5b52e09b8ce5747908bdba6e5173b76e5dbc0ce20b9fc95943df407bd2e6`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.4-debug.apk
+- SHA-256: `e1dcaadabd29bf4983ea6c2a09520132abc5a7c605ab9fd4cd04ad33f76e333b`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -162,8 +164,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.3-debug.apk
-> sha256sum dist/ichnaea-android-v0.3.3-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.4-debug.apk
+> sha256sum dist/ichnaea-android-v0.3.4-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -176,7 +178,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.3.3 dist/ichnaea-android-v0.3.3-debug.apk --title "Ichnaea Android v0.3.3"
+> gh release create v0.3.4 dist/ichnaea-android-v0.3.4-debug.apk --title "Ichnaea Android v0.3.4"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the

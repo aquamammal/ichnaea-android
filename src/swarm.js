@@ -29,6 +29,7 @@ import { derivePairTopic, pubToB64, sealLogKey, openLogKey } from './crypto.js'
 
 const HELLO = 'beacon-hello'
 const LOG_KEY = 'beacon-log-key'
+const REQ_CHECKIN = 'beacon-request-checkin'
 const HANDSHAKE_PROTOCOL = 'ichnaea-handshake'
 
 export function createSwarmManager ({
@@ -43,7 +44,8 @@ export function createSwarmManager ({
   onLogKey, // (contactId, logKeyBuffer) => void
   onUpdate, // (state) => void  — peer/connection counts
   bootstrap, // optional DHT bootstrap node list (default when omitted)
-  onFirstConnection // optional timing hook: (msSinceBoot, contactId) => void
+  onFirstConnection, // optional timing hook: (msSinceBoot, contactId) => void
+  onCheckinRequest // optional (contactId) => void — a verified contact asked us to check in
 }) {
   const swarm = new Hyperswarm(bootstrap && bootstrap.length ? { bootstrap } : undefined)
   const discoveries = new Map() // contactId -> { discovery, topicHex, publicKeyB64 }
@@ -84,6 +86,7 @@ export function createSwarmManager ({
         if (!msg || typeof msg.type !== 'string') return
         if (msg.type === HELLO) handleHelloFrame(conn, msg)
         else if (msg.type === LOG_KEY) handleLogKeyFrame(conn, msg)
+        else if (msg.type === REQ_CHECKIN) handleCheckinRequestFrame(conn)
       }
     })
     connToChannel.set(conn, sender)
@@ -202,6 +205,15 @@ export function createSwarmManager ({
     if (onLogKey) onLogKey(contactId, logKey)
   }
 
+  // A verified contact asked us to broadcast a check-in. Only ever fires on an
+  // active, verified connection (the frame is only accepted on such a conn).
+  // Whether we honor it (and how often) is the app's policy (onCheckinRequest).
+  function handleCheckinRequestFrame (conn) {
+    const contactId = connToContact.get(conn)
+    if (!contactId) return
+    if (onCheckinRequest) onCheckinRequest(contactId)
+  }
+
   // Join the pair-wise topic for a contact. contact = { id, publicKeyB64 }.
   async function joinContact (contact) {
     if (discoveries.has(contact.id)) return
@@ -233,6 +245,21 @@ export function createSwarmManager ({
     return conns.get(contactId) || null
   }
 
+  // Send a "please check in" request to a verified contact over their active
+  // connection. Returns true if sent, false if there's no live verified conn
+  // (the contact is offline — the caller decides what to tell the user).
+  function sendCheckinRequest (contactId) {
+    const conn = conns.get(contactId)
+    const sender = conn && connToChannel.get(conn)
+    if (!sender) return false
+    try {
+      sender.send(JSON.stringify({ type: REQ_CHECKIN }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
   // Re-broadcast our hello on all verified conns (e.g. after core rotation
   // changes our core key, or our interval changes).
   function refreshHello () {
@@ -259,4 +286,4 @@ export function createSwarmManager ({
     await swarm.destroy()
   }
 
-  return { joinContact, leaveContact, getConn, refreshHello, refreshLocalCore, refreshLogKey, close, state: () => ({ ...state }), swarm }}
+  return { joinContact, leaveContact, getConn, refreshHello, refreshLocalCore, refreshLogKey, sendCheckinRequest, close, state: () => ({ ...state }), swarm }}
