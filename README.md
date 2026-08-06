@@ -118,6 +118,8 @@ The renderer supports six user-selectable views, picked in **Settings → Map st
 
 **Quiet-contact notifications** — when a contact goes stale/offline, a **local-only** notification says "X went quiet — last check-in …" (no coordinates, nothing sent). Toggle it in **Settings → Notify when a contact goes quiet** (default on).
 
+**City search (no-GPS fallback)** — when **Broadcast coordinates** finds no GPS fix, the prompt has a **city search**: type a city name and it fills in the coordinates (bundled GeoNames cities5000 dataset, ~68k cities, searched locally — zero telemetry). Manual lat/lng entry still works.
+
 **Click to center** — tap a contact in the list or a pin on the map/globe to center the view on them.
 
 **Update check** — **Settings → Check for updates** fetches the latest **GitHub Release** for this repo and reports if a newer build exists. When one is available it shows an **Update now** button that downloads the new APK **in the app** and hands it to the Android package installer (via the native `IchnaeaUpdater` plugin), so you can update without leaving Ichnaea. It is **manual and opt-in**: no network request happens on boot or in the background (preserves zero-telemetry). On the first in-app update Android 8+ will ask you to allow Ichnaea to "Install unknown apps" — enable it, then tap Update again.
@@ -148,8 +150,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 
 **Download the prebuilt APK** (recommended for testers):
 
-- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.2.16-debug.apk
-- SHA-256: `5f6bf55c8fb7984b2bd6206ec95afd03b4d1a7f33b04411e1cff54a5d02bb28f`
+- Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.0-debug.apk
+- SHA-256: `209465fc5658a3dfaaaf9cf533230617bbe9cd0d1130597ce4fc40af88a7711c`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -158,8 +160,8 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 >
 > ```bash
 > npm run build:apk
-> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.2.16-debug.apk
-> sha256sum dist/ichnaea-android-v0.2.16-debug.apk   # update the SHA-256 above
+> cp android/app/build/outputs/apk/debug/app-debug.apk dist/ichnaea-android-v0.3.0-debug.apk
+> sha256sum dist/ichnaea-android-v0.3.0-debug.apk   # update the SHA-256 above
 > ```
 >
 > A stale dist APK silently ships old behavior — e.g. the QR share feature was
@@ -172,7 +174,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > the APK attached:
 >
 > ```bash
-> gh release create v0.2.16 dist/ichnaea-android-v0.2.16-debug.apk --title "Ichnaea Android v0.2.16"
+> gh release create v0.3.0 dist/ichnaea-android-v0.3.0-debug.apk --title "Ichnaea Android v0.3.0"
 > ```
 >
 > Bump `package.json` + `versionName`/`versionCode` in the same change so the

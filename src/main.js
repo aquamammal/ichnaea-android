@@ -6,6 +6,7 @@ import { openScanner } from './scanner.js'
 import { checkForUpdates } from './updates.js'
 import { fingerprint } from './fingerprint.js'
 import { createBackoff } from './backoff.js'
+import { searchCities } from './cities.js'
 
 // Renderer for Ichnaea Android. This is a THIN PIPE CLIENT: it owns only the
 // globe, the UI, and geolocation. ALL P2P state (identity, contacts, the local
@@ -32,6 +33,7 @@ const els = {
   modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
   modalBroadcastNudge: $('modal-broadcast-nudge'), broadcastNudgeNow: $('broadcast-nudge-now'), broadcastNudgeLater: $('broadcast-nudge-later'),
   modalManualCheckin: $('modal-manual-checkin'), manualCheckinLat: $('manual-checkin-lat'), manualCheckinLng: $('manual-checkin-lng'), manualCheckinErr: $('manual-checkin-error'), manualCheckinOk: $('manual-checkin-ok'), manualCheckinCancel: $('manual-checkin-cancel'),
+  citySearch: $('city-search'), cityResults: $('city-results'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
   quietNotify: $('quiet-notify'),
   manualLat: $('manual-lat'), manualLng: $('manual-lng'), manualEnabled: $('manual-enabled'),
@@ -625,6 +627,14 @@ function initUI () {
     els.manualCheckinOk.addEventListener('click', onManualPromptCheckin)
     els.manualCheckinCancel.addEventListener('click', () => closeModal(els.modalManualCheckin))
   }
+  if (els.citySearch) {
+    let debounce = null
+    els.citySearch.addEventListener('input', (e) => {
+      clearTimeout(debounce)
+      const q = e.target.value
+      debounce = setTimeout(() => onCitySearch(q), 150)
+    })
+  }
   if (els.btnScanQr) {
     els.btnScanQr.addEventListener('click', onScanQr)
   }
@@ -1047,6 +1057,46 @@ async function onCheckinNow () {
     toast('No GPS fix \u2014 enter coordinates to broadcast')
     openModal(els.modalManualCheckin)
     els.manualCheckinErr.textContent = ''
+    if (els.citySearch) { els.citySearch.value = ''; els.cityResults.innerHTML = '' }
+  }
+}
+
+// Search the bundled city dataset and render matches; picking one fills the
+// lat/lng inputs. Debounced so a lazy 2.4MB data fetch + scan only happens on
+// real input.
+async function onCitySearch (query) {
+  if (!els.cityResults) return
+  if (!query || !query.trim()) { els.cityResults.innerHTML = ''; return }
+  els.cityResults.innerHTML = '<div class="label">Searching\u2026</div>'
+  let cities = []
+  try {
+    cities = await searchCities(query, 8)
+  } catch (err) {
+    els.cityResults.innerHTML = '<div class="label">Couldn\u2019t load city data: ' + String((err && err.message) || err) + '</div>'
+    return
+  }
+  if (!cities.length) {
+    els.cityResults.innerHTML = '<div class="label">No matching cities.</div>'
+    return
+  }
+  els.cityResults.innerHTML = ''
+  for (const c of cities) {
+    const row = document.createElement('div')
+    row.className = 'city-row'
+    const name = document.createElement('span')
+    name.className = 'city-name'
+    name.textContent = c.name + (c.cc ? ' (' + c.cc + ')' : '')
+    const meta = document.createElement('span')
+    meta.className = 'city-meta'
+    meta.textContent = round(c.lat) + ', ' + round(c.lng)
+    row.append(name, meta)
+    row.addEventListener('click', () => {
+      els.manualCheckinLat.value = c.lat
+      els.manualCheckinLng.value = c.lng
+      els.cityResults.innerHTML = ''
+      els.manualCheckinErr.textContent = ''
+    })
+    els.cityResults.appendChild(row)
   }
 }
 

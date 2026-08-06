@@ -99,6 +99,11 @@
       .history-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; padding: 5px 8px; border-radius: 6px; background: rgba(12, 17, 24, 0.55); }
       .history-time { color: var(--text); }
       .history-coords { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+      .city-results { max-height: 26vh; overflow-y: auto; margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+      .city-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 6px; background: rgba(12, 17, 24, 0.55); cursor: pointer; border: 1px solid transparent; }
+      .city-row:active, .city-row:hover { border-color: var(--accent); }
+      .city-name { color: var(--text); }
+      .city-meta { color: var(--muted); font-size: 11px; }
       .contact-coords { font-size: 11px; color: var(--muted); padding: 2px 0 0 16px; font-family: ui-monospace, Menlo, Consolas, monospace; }
       .contact-fingerprint { font-size: 10px; color: var(--muted); padding: 2px 0 0 16px; font-family: ui-monospace, Menlo, Consolas, monospace; opacity: 0.75; }
       .contact-item + .contact-item { border-top: 1px solid rgba(255,255,255,0.05); }
@@ -169,7 +174,7 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2 id="beacon-title">Ichnaea Ver. 0.2.16</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.3.0</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
@@ -352,7 +357,9 @@
     <div class="modal-backdrop" id="modal-manual-checkin">
       <div class="modal">
         <h3>No GPS fix</h3>
-        <div class="label">Enter your coordinates to broadcast your location.</div>
+        <div class="label">Enter your coordinates — or search a city — to broadcast your location.</div>
+        <input id="city-search" placeholder="Search a city…" spellcheck="false" autocomplete="off" style="margin-top:10px" />
+        <div id="city-results" class="city-results"></div>
         <div class="row" style="gap:8px;margin-top:10px">
           <input id="manual-checkin-lat" type="number" min="-90" max="90" step="any" placeholder="Lat (−90..90)" style="flex:1" />
           <input id="manual-checkin-lng" type="number" min="-180" max="180" step="any" placeholder="Lng (−180..180)" style="flex:1" />
@@ -389,8 +396,8 @@
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.2.16</div>
+    <div id="version-tag">ichnaea-android v0.3.0</div>
 
-    <script type="module" src="./main.bundle.js?v=1786000139823"></script>
+    <script type="module" src="./main.bundle.js?v=1786001052097"></script>
   </body>
 </html>
