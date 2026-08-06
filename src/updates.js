@@ -9,7 +9,7 @@
 // and reports whether a newer build exists, linking to the release page.
 
 // Change when bumping the app version (mirrors package.json / versionName).
-export const APP_VERSION = '0.2.13'
+export const APP_VERSION = '0.2.14'
 const REPO = 'aquamammal/ichnaea-android'
 
 const GITHUB_API = `https://api.github.com/repos/${REPO}/releases/latest`
@@ -66,6 +66,12 @@ export async function checkForUpdates (current = APP_VERSION) {
   const releaseUrl = (data && data.html_url) || GITHUB_WEB
   const asset = (data && data.assets && data.assets[0]) || null
   const assetUrl = asset ? asset.browser_download_url : null
+  // Second download candidate: the committed dist/ APK served from raw
+  // content — a different GitHub host than the release-asset CDN, useful when a
+  // network can reach api.github.com but not objects.githubusercontent.com.
+  const rawUrl = asset && asset.name
+    ? `https://raw.githubusercontent.com/${REPO}/main/dist/${asset.name}`
+    : null
   return {
     ok: true,
     updateAvailable: isNewerVersion(tag, current),
@@ -73,6 +79,7 @@ export async function checkForUpdates (current = APP_VERSION) {
     latest: tag.replace(/^v/i, ''),
     latestTag: tag,
     releaseUrl,
-    assetUrl
+    assetUrl,
+    rawUrl
   }
 }

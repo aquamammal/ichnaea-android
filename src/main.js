@@ -852,27 +852,71 @@ function capPlugin (name) {
   return null
 }
 
-// Download the new APK in-app and hand it to the Android package installer via
-// the native IchnaeaUpdater plugin. Falls back to opening the URL in a browser
-// if the plugin is unavailable (e.g. on desktop).
+// Convert an ArrayBuffer to base64 without hitting the argument-count limit.
+function bufToB64 (buf) {
+  const bytes = new Uint8Array(buf)
+  let bin = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(bin)
+}
+
+// Fetch a URL with a hard timeout so a flaky network can never hang the UI.
+async function fetchWithTimeout (url, ms) {
+  const ctl = new AbortController()
+  const t = setTimeout(() => ctl.abort(), ms)
+  try {
+    const res = await fetch(url, { signal: ctl.signal })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return await res.arrayBuffer()
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+// Download the new APK through the WebView's network stack (far more reliable
+// than the native HTTP client on flaky networks), pass the bytes to the native
+// IchnaeaUpdater plugin, and hand it to the Android package installer. Tries the
+// release asset URL, then the committed dist/ raw URL, then offers the browser.
 async function onUpdateNow () {
   const res = lastUpdate
   if (!res || !res.assetUrl) return
   const cap = capPlugin('IchnaeaUpdater')
-  if (cap) {
-    els.updatesStatus.textContent = '\u2b07'
-    els.updatesDetail.textContent = 'Downloading update\u2026'
-    els.btnUpdateNow.disabled = true
-    try {
-      await cap.install({ url: res.assetUrl })
-      els.updatesDetail.textContent = 'Installer opened \u2014 confirm the update on the next screen.'
-    } catch (err) {
-      els.updatesDetail.textContent = 'Couldn\u2019t update: ' + String((err && err.message) || err)
-      els.btnUpdateNow.disabled = false
+  els.updatesStatus.textContent = '\u2b07'
+  els.updatesDetail.textContent = 'Downloading update\u2026'
+  els.btnUpdateNow.disabled = true
+  try {
+    const urls = [res.assetUrl, res.rawUrl].filter(Boolean)
+    let buf = null
+    let lastErr = null
+    for (const u of urls) {
+      try {
+        buf = await fetchWithTimeout(u, 30000)
+        break
+      } catch (err) {
+        lastErr = err
+      }
     }
-  } else {
-    window.open(res.assetUrl, '_blank')
-    els.updatesDetail.textContent = 'Opening download\u2026'
+    if (!buf) throw new Error('Download failed: ' + String((lastErr && lastErr.message) || lastErr || 'network error'))
+    els.updatesDetail.textContent = 'Downloaded \u2014 preparing installer\u2026'
+    const base64 = bufToB64(buf)
+    if (cap) {
+      await cap.install({ base64 })
+    } else {
+      window.open(res.assetUrl, '_blank')
+    }
+    els.updatesDetail.textContent = 'Installer opened \u2014 confirm the update on the next screen.'
+  } catch (err) {
+    const msg = String((err && err.message) || err)
+    els.updatesDetail.textContent = 'Couldn\u2019t update: ' + msg
+    els.btnUpdateNow.disabled = false
+    // Last resort: hand the direct URL to the system browser / download manager.
+    if (res && res.assetUrl) {
+      try { window.open(res.assetUrl, '_blank') } catch { /* ignore */ }
+      els.updatesDetail.title = res.assetUrl
+    }
   }
 }
 
