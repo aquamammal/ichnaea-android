@@ -32,7 +32,7 @@ const els = {
   modalUnlock: $('modal-unlock'), unlockPass: $('unlock-passphrase'), unlockErr: $('unlock-error'), unlockConfirm: $('unlock-confirm'),
   modalHistory: $('modal-history'), historyTitle: $('history-title'), historyList: $('history-list'), historyClose: $('history-close'),
   modalBroadcastNudge: $('modal-broadcast-nudge'), broadcastNudgeNow: $('broadcast-nudge-now'), broadcastNudgeLater: $('broadcast-nudge-later'),
-  modalManualCheckin: $('modal-manual-checkin'), manualCheckinLat: $('manual-checkin-lat'), manualCheckinLng: $('manual-checkin-lng'), manualCheckinErr: $('manual-checkin-error'), manualCheckinOk: $('manual-checkin-ok'), manualCheckinCancel: $('manual-checkin-cancel'),
+  modalManualCheckin: $('modal-manual-checkin'), manualCheckinLat: $('manual-checkin-lat'), manualCheckinLng: $('manual-checkin-lng'),   manualCheckinErr: $('manual-checkin-error'), manualCheckinOk: $('manual-checkin-ok'), manualCheckinCancel: $('manual-checkin-cancel'), manualCheckinClose: $('manual-checkin-close'),
   citySearch: $('city-search'), cityResults: $('city-results'),
   btnEncrypt: $('btn-encrypt'), encryptStatus: $('encrypt-status'), encryptDetail: $('encrypt-detail'),
   quietNotify: $('quiet-notify'),
@@ -626,6 +626,7 @@ function initUI () {
   if (els.manualCheckinOk) {
     els.manualCheckinOk.addEventListener('click', onManualPromptCheckin)
     els.manualCheckinCancel.addEventListener('click', () => closeModal(els.modalManualCheckin))
+    els.manualCheckinClose.addEventListener('click', () => closeModal(els.modalManualCheckin))
   }
   if (els.citySearch) {
     let debounce = null
@@ -633,6 +634,10 @@ function initUI () {
       clearTimeout(debounce)
       const q = e.target.value
       debounce = setTimeout(() => onCitySearch(q), 150)
+    })
+    // Enter on the search dismisses the keyboard without broadcasting.
+    els.citySearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); els.citySearch.blur() }
     })
   }
   if (els.btnScanQr) {

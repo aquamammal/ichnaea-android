@@ -122,10 +122,15 @@
       .modal {
         width: 380px; max-width: calc(100vw - 40px);
         max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain;
+        max-height: calc(100dvh - 32px); /* account for the on-screen keyboard */
         background: #0d141c; border: 1px solid var(--border);
         border-radius: 14px; padding: 18px;
       }
       .modal h3 { margin: 0 0 14px 0; font-size: 16px; }
+      .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: 0 0 14px 0; }
+      .modal-head h3 { margin: 0; }
+      .modal-x { flex: none; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid var(--border); font-size: 18px; line-height: 1; cursor: pointer; }
+      .modal-x:active { background: rgba(255,255,255,0.14); }
       .modal label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
       .modal input, .modal select {
         width: 100%; background: rgba(0,0,0,0.35); color: var(--text);
@@ -174,7 +179,7 @@
     <!-- Top-left control panel -->
     <div class="panel" id="panel-topleft">
       <div class="panel-head">
-        <h2 id="beacon-title">Ichnaea Ver. 0.3.0</h2>
+        <h2 id="beacon-title">Ichnaea Ver. 0.3.1</h2>
         <button class="min-btn" id="min-beacon" title="Minimize">–</button>
       </div>
       <div class="panel-body">
@@ -356,13 +361,16 @@
     <!-- Manual-coordinates prompt (no GPS fix) -->
     <div class="modal-backdrop" id="modal-manual-checkin">
       <div class="modal">
-        <h3>No GPS fix</h3>
+        <div class="modal-head">
+          <h3>No GPS fix</h3>
+          <button id="manual-checkin-close" class="modal-x" aria-label="Close">×</button>
+        </div>
         <div class="label">Enter your coordinates — or search a city — to broadcast your location.</div>
-        <input id="city-search" placeholder="Search a city…" spellcheck="false" autocomplete="off" style="margin-top:10px" />
+        <input id="city-search" placeholder="Search a city…" spellcheck="false" autocomplete="off" enterkeyhint="done" style="margin-top:10px" />
         <div id="city-results" class="city-results"></div>
         <div class="row" style="gap:8px;margin-top:10px">
-          <input id="manual-checkin-lat" type="number" min="-90" max="90" step="any" placeholder="Lat (−90..90)" style="flex:1" />
-          <input id="manual-checkin-lng" type="number" min="-180" max="180" step="any" placeholder="Lng (−180..180)" style="flex:1" />
+          <input id="manual-checkin-lat" type="number" min="-90" max="90" step="any" placeholder="Lat (−90..90)" style="flex:1" enterkeyhint="done" />
+          <input id="manual-checkin-lng" type="number" min="-180" max="180" step="any" placeholder="Lng (−180..180)" style="flex:1" enterkeyhint="done" />
         </div>
         <div class="form-error" id="manual-checkin-error"></div>
         <div class="actions">
@@ -396,8 +404,8 @@
     </div>
 
     <div id="toast"></div>
-    <div id="version-tag">ichnaea-android v0.3.0</div>
+    <div id="version-tag">ichnaea-android v0.3.1</div>
 
-    <script type="module" src="./main.bundle.js?v=1786001052097"></script>
+    <script type="module" src="./main.bundle.js?v=1786001802630"></script>
   </body>
 </html>
