@@ -2,7 +2,7 @@
 
 Android port of [Ichnaea](https://github.com/aquamammal/ichnaea-v2) — a privacy-first, peer-to-peer location check-in app with end-to-end encryption.
 
-Runs the full Hyperswarm/Hypercore P2P stack on Android via **NodeJS-Mobile** (embedded Node) with a **Capacitor WebView** UI. The renderer talks to the Node P2P process over a localhost WebSocket bridge.
+Runs the full Hyperswarm/Hypercore P2P stack on Android via **Bare** (Holepunch's lightweight runtime — the NodeJS-Mobile engine was replaced) with a **Capacitor WebView** UI. The renderer talks to the Bare P2P process over a localhost WebSocket bridge.
 
 ## How it works
 
@@ -13,19 +13,20 @@ Runs the full Hyperswarm/Hypercore P2P stack on Android via **NodeJS-Mobile** (e
 │  geolocation via navigator.geolocation                  │
 │         │  ws://localhost:14770                         │
 ├─────────▼──────────────────────────────────────────────┤
-│ NodeJS-Mobile (embedded Node, runs in a ForegroundService) │
-│  src/node/server.js  → WebSocket bridge                 │
+│ Bare runtime (exec'd as a subprocess in a ForegroundService) │
+│  src/node/server.js  → WebSocket bridge (bare-ws)       │
 │  src/main/           → P2P stack (Hyperswarm, Hypercore, │
 │                         identity, contacts, E2E crypto)  │
-│  libnode.so + udx-native.node (native DHT/UDP addon)    │
+│  libbare.so + .bare addons (udx-native UDP, sodium)     │
 └────────────────────────────────────────────────────────┘
 ```
 
 ## Requirements
 
 - Node.js LTS (18+)
-- Android SDK (API 34), NDK, CMake
+- Android SDK (API 34), NDK (for `libc++_shared.so`)
 - Android Studio (recommended) or `adb` + gradle CLI
+- `patchelf` (used by `scripts/bare-assets.mjs` to patch native addons; set `PATCHELF=/path/to/patchelf` if it's not on PATH)
 
 ## Setup
 
@@ -40,7 +41,7 @@ npx cap add android   # generates android/ locally (gitignored; see the regenera
 
 ```bash
 export ANDROID_HOME=$HOME/Android/Sdk
-npm run build:apk     # bundles Node + renderer, syncs, builds debug APK
+npm run build:apk     # bundles Bare runtime + renderer, syncs, builds debug APK
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -48,26 +49,26 @@ Or open `android/` in Android Studio and press Run.
 
 ## Development
 
-- `npm run build:node` — bundle the Node P2P stack (`src/node/server.js`) → `android/app/src/main/assets/nodejs-project/bundle.cjs`.
+- `npm run build:node` — bundle the Bare P2P stack (`src/node/server.js`, `bare-ws` transport) → `android/app/src/main/assets/bare-bundle/bundle.cjs`.
+- `npm run build:bare` — assemble the Bare assets: copy the `bare` runtime into `jniLibs`, copy the native-addon module tree, patch the `.bare` addons, inject the `bare-tls` stub.
 - `npm run build:renderer` — bundle the WebView renderer (`src/main.js` + globe.gl + d3-geo-polygon) → `src/main.bundle.js`.
-- `npm run node:start` — run the Node bridge on desktop (test with a browser pointed at `ws://localhost:14770`).
 - `npm test` — shared unit tests (crypto, staleness).
+
+> The bridge used to run on Node (NodeJS-Mobile, `ws`). It now runs on **Bare** (Holepunch's lightweight mobile runtime) with the official `bare-ws` WebSocket library — same protocol, same port 14770, same message format, but a much lighter runtime footprint. Bare's `console.log` routes to logcat under the `libbare.so` tag.
 
 ## Architecture
 
-- `src/node/server.js` — NodeJS-Mobile entrypoint: WebSocket server on `localhost:14770`, boots the P2P app once, re-targets the pipe per renderer connection.
-- `src/main/` — shared P2P stack (Hyperswarm, Hypercore, identity, contacts, settings, scheduler, E2E encryption). Same code as the desktop version, bundled for Node 12.
+- `src/node/server.js` — Bare entrypoint: WebSocket server on `localhost:14770` (via `bare-ws`), boots the P2P app once, re-targets the pipe per renderer connection. Bare has no `process` global, so the env/stdin access is guarded (falls back to `bare-process`).
+- `src/main/` — shared P2P stack (Hyperswarm, Hypercore, identity, contacts, settings, scheduler, E2E encryption). Same code as the desktop version; the esbuild bundle aliases `fs`/`path`/`url`/`events` to their bare equivalents (`bare-fs` etc.) and externalizes the native addons.
 - `src/main.js`, `src/index.html`, `src/staleness.js`, `src/renderer.js`, `src/map-styles.js`, `src/globe-renderer.js`, `src/map2d.js`, `src/assets/` — WebView UI, bundled with esbuild (browsers can't resolve bare imports like `globe.gl`). `src/renderer.js` dispatches on the user-selected **map style** (`src/map-styles.js`): three 3D globe looks (wireframe / full-color Blue Marble / colored countries + blue water) and three 2D maps (world / Taiwan-centered / Dymaxion, via `d3-geo` + `d3-geo-polygon`). Picked in Settings, persisted in localStorage, applied on reload.
-- `android/app/src/main/cpp/` — JNI bridge: starts Node via the embedder API, redirects stdout/stderr to logcat.
-- `android/app/src/main/jniLibs/arm64-v8a/` — `libnode.so`, `libc++_shared.so`, plus the compiled JNI lib.
-- `android/app/src/main/assets/nodejs-project/` — the bundled Node stack.
-- `android/app/src/main/assets/nodejs-native-assets-arm64-v8a/` — native addons for Node's `require()` (udx-native + deps).
+- `android/app/src/main/jniLibs/arm64-v8a/` — `libbare.so` (the Bare runtime executable) + `libc++_shared.so`. The binary lives in jniLibs because Android's SELinux policy forbids exec'ing files from the app data dir; `NodeService` spawns it as a subprocess.
+- `android/app/src/main/assets/bare-bundle/` — the bundled Bare stack (`bundle.cjs`) + native-addon module tree (`.bare` prebuilds for udx-native, sodium-native, bare-crypto/dns/tcp/ws chain). Each `.bare` addon is `patchelf`'d with `RUNPATH=$ORIGIN` and ships with a local `libc++_shared.so` (the exec'd binary's default linker namespace can't see the app lib dir or the device's `/vendor/lib64/libc++_shared.so`).
 
 ## Mobile lifecycle & networking (Android)
 
 The app runs the P2P stack in a **ForegroundService** (persistent notification) so Android doesn't kill it or throttle its UDP sockets:
 
-- **Connectivity hooks** — a `ConnectivityManager.NetworkCallback` in `NodeService.java` watches the network. On connectivity loss it sends `suspend` to Node; on a Wi-Fi ↔ cellular transport switch it "bounces" the swarm (`suspend` then `resume` ~2.5s later). Node receives these over a **stdin control channel** (a socketpair wired in the JNI bridge) and calls Hyperswarm's `swarm.suspend()` / `swarm.resume()`, so the DHT re-binds sockets and re-announces topics instead of silently dropping off.
+- **Connectivity hooks** — a `ConnectivityManager.NetworkCallback` in `NodeService.java` watches the network. On connectivity loss it sends `suspend` to Bare; on a Wi-Fi ↔ cellular transport switch it "bounces" the swarm (`suspend` then `resume` ~2.5s later). Bare receives these as newline-delimited JSON on the **child process's stdin** (`bare-process` exposes it; previously this was a socketpair wired in the removed JNI bridge) and calls Hyperswarm's `swarm.suspend()` / `swarm.resume()`, so the DHT re-binds sockets and re-announces topics instead of silently dropping off.
 - **Multicast lock** — `WifiManager.MulticastLock` is held so local-area UDP multicast (Hyperswarm's LAN peer discovery) works.
 - **Battery exemption** — `MainActivity` asks the user to disable battery optimization (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) so Doze doesn't freeze the service.
 
@@ -136,15 +137,15 @@ All surfaces derive from the bundled Natural Earth data + Blue Marble texture �
 
 ## Native addon fixes (important for rebuilds)
 
-The NodeJS-Mobile runtime is Node 12; the modern holepunch stack (udx-native) needs a few fixes to load:
+The app runs on **Bare** (Holepunch runtime), not NodeJS-Mobile. The native `.bare` addons (udx-native, sodium-native, bare-crypto/dns/tcp/ws) all need a fix that `scripts/bare-assets.mjs` applies automatically:
 
-1. **`udx-native.node` must be patched to declare `libnode.so` (and the JNI shim lib) as dependencies**, so N-API symbols resolve past Android's linker namespaces:
+1. **`libc++_shared.so` must be reachable.** The app execs `libbare.so` from jniLibs, so its `dlopen` uses the **default linker namespace** — it can't see the app's native lib dir or the device's `/vendor/lib64/libc++_shared.so`, and Android's linker does *not* search a dlopen'd DSO's own directory. Verified on-device fix: each `.bare` addon is patched with `RUNPATH=$ORIGIN` and ships with a local `libc++_shared.so` beside it:
    ```bash
-   patchelf --add-needed libnode.so android/app/src/main/assets/nodejs-native-assets-arm64-v8a/udx-native/prebuilds/android-arm64/udx-native.node
-   patchelf --add-needed libichnaea-nodejs-mobile.so android/app/src/main/assets/nodejs-native-assets-arm64-v8a/udx-native/prebuilds/android-arm64/udx-native.node
+   patchelf --set-rpath '$ORIGIN' android/app/src/main/assets/bare-bundle/node_modules/<pkg>/prebuilds/android-arm64/<pkg>.bare
    ```
-2. **`uv_timer_get_due_in`** (added in libuv 1.45, missing in Node 12's libuv 1.39) is provided by a shim in `android/app/src/main/cpp/native-lib.cpp`, exported from the JNI lib linked above.
-3. `sodium-native` is shipped as a native addon (android-arm64 prebuild, patched like udx-native) and loaded at runtime — it must **not** be aliased to `sodium-javascript` (that pure-JS fallback is missing `crypto_scalarmult_ed25519_noclamp`, which breaks the DHT noise handshake).
+2. **`bare-tls` is a stub.** The npm package ships only prebuilds (no JS), yet `bare-ws` eagerly loads it. Since Ichnaea only ever serves `ws://` on localhost, the pipeline injects a stub package (real prebuilds preserved).
+3. `sodium-native` is shipped as a native `.bare` addon (android-arm64 prebuild) and loaded at runtime — it must **not** be aliased to `sodium-javascript` (that pure-JS fallback is missing `crypto_scalarmult_ed25519_noclamp`, which breaks the DHT noise handshake).
+4. The bare runtime binary must live in `jniLibs` (as `libbare.so`), **not** assets — Android's SELinux policy denies `execve` of files labeled `app_data_file` (`execute_no_trans`), and the APK must extract it to a real file (`useLegacyPackaging`).
 
 ## Sideload (how people install it)
 
@@ -155,7 +156,7 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 **Download the prebuilt APK** (recommended for testers):
 
 - Direct: https://github.com/aquamammal/ichnaea-android/raw/main/dist/ichnaea-android-v0.3.4-debug.apk
-- SHA-256: `e1dcaadabd29bf4983ea6c2a09520132abc5a7c605ab9fd4cd04ad33f76e333b`
+- SHA-256: `795b3fc387a72d9455e30c1441c44eb15ba844b85d951f9eea4c8daaf9129681`
 
 > **Keep the dist APK in sync with `main` (mandatory).** The GitHub link above is the
 > distribution artifact — it must always be the **current build**, not a stale one.
@@ -193,13 +194,13 @@ The APK is a self-signed **debug** build — Android treats it as an "unknown ap
 > - Re-add `<uses-permission android:name="android.permission.CAMERA" />` (QR scanning).
 > - Re-add `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />` (in-app update install).
 > - Re-add `IchnaeaUpdaterPlugin.java` + `IchnaeaNotifyPlugin.java` classes. They are auto-discovered via `android/app/src/main/assets/capacitor.plugins.json`, which `cap sync` regenerates — so `scripts/plugins.mjs` re-appends them to that file automatically during `npm run build:apk` (no manual `registerPlugin` in `MainActivity`). `IchnaeaUpdater` relies on the existing `FileProvider` (`${applicationId}.fileprovider`) + `res/xml/file_paths.xml` `cache-path` (already in the generated manifest); `IchnaeaNotify` uses the `POST_NOTIFICATIONS` permission (already in the manifest).
-> - Re-apply any other `android/` customizations from `scripts/native-assets.mjs` notes (e.g. `NodeService.java`, the `CAMERA`/`POST_NOTIFICATIONS` permissions, the JNI bridge).
+> - Re-apply the Bare host files: `NodeService.java` (spawns `libbare.so` from `nativeLibraryDir`, keeps the multicast lock + network callback), `android/app/build.gradle` (`useLegacyPackaging` so `libbare.so` is extracted as a real exec-able file), `jniLibs/arm64-v8a/{libbare.so,libc++_shared.so}`, and `assets/bare-bundle/` — all generated by `scripts/bare-assets.mjs` + `npm run build:apk`. The old `native-lib.cpp` JNI bridge and `nodejs-*` assets no longer exist.
 
 Or build it yourself from this repo:
 
 ```bash
 npm run build:apk
-# → android/app/build/outputs/apk/debug/app-debug.apk  (~30 MB)
+# → android/app/build/outputs/apk/debug/app-debug.apk  (~68 MB; the 84 MB Bare runtime + patched addons compress into it)
 ```
 
 Build it once (this repo), then share the file:

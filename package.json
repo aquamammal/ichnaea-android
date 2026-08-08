@@ -7,17 +7,18 @@
   "scripts": {
     "dev": "npx cap sync && npx cap open android",
     "test": "brittle test/*.test.js",
-    "node:start": "node src/node/server.js",
-    "build:node": "esbuild src/node/server.js --bundle --platform=node --target=node12 --format=cjs --external:udx-native --external:sodium-native --external:bufferutil --external:utf-8-validate --outfile=android/app/src/main/assets/nodejs-project/bundle.cjs",
-    "build:apk": "npm run build:node && npm run build:assets && npx cap sync android && node scripts/plugins.mjs && cd android && ./gradlew assembleDebug",
+    "build:node": "esbuild src/node/server.js --bundle --platform=node --target=es2022 --format=cjs --alias:events=bare-events --alias:fs=bare-fs --alias:path=bare-path --alias:url=bare-url --external:udx-native --external:sodium-native --external:bare-fs --external:bare-path --external:bare-url --external:bare-dns --external:bare-crypto --external:bare-tcp --external:bare-tls --outfile=android/app/src/main/assets/bare-bundle/bundle.cjs",
+    "build:bare": "node scripts/bare-assets.mjs",
+    "build:apk": "npm run build:node && npm run build:bare && npx cap sync android && node scripts/plugins.mjs && cd android && ./gradlew assembleDebug",
     "build:renderer": "node -e \"const fs=require('fs');const p='src/index.html';let s=fs.readFileSync(p,'utf8');s=s.replace(/main\\.bundle\\.js\\?v=\\d+/, 'main.bundle.js?v='+Date.now());fs.writeFileSync(p,s)\" && esbuild src/main.js --bundle --format=esm --target=es2019 --outfile=src/main.bundle.js",
-    "build:assets": "node scripts/native-assets.mjs"
+    "build:assets": "node scripts/bare-assets.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
     "@capacitor/core": "^6.0.0",
     "@capacitor/geolocation": "^6.0.0",
     "b4a": "^1.8.1",
+    "bare-ws": "^3.0.0",
     "compact-encoding": "^3.3.0",
     "d3-geo-polygon": "^1.12.1",
     "globe.gl": "^2.46.1",
